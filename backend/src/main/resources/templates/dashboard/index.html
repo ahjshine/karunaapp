@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Security Dashboard · MedSentinel</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link th:href="@{/css/style.css}" rel="stylesheet">
+</head>
+<body class="bg-light">
+<div th:replace="~{fragments/navbar :: navbar}"></div>
+<main class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div><h1 class="h2 mb-1">Security Operations Center</h1><p class="text-muted mb-0">Monitor and investigate clinical-access events.</p></div>
+        <a th:href="@{/dashboard/integrity}" class="btn btn-outline-primary">Verify Integrity</a>
+    </div>
+    <div class="row g-3 mb-4">
+        <div class="col-md-4"><div class="card kpi-card border-primary"><div class="card-body"><span class="text-muted">Open alerts</span><p class="display-6 mb-0" th:text="${openAlerts}">0</p></div></div></div>
+        <div class="col-md-4"><div class="card kpi-card border-danger"><div class="card-body"><span class="text-muted">High severity</span><p class="display-6 mb-0 text-danger" th:text="${highSeverity}">0</p></div></div></div>
+        <div class="col-md-4"><div class="card kpi-card border-warning"><div class="card-body"><span class="text-muted">Failed logins · 24h</span><p class="display-6 mb-0" th:text="${failedLogins}">0</p></div></div></div>
+    </div>
+    <div class="row g-4">
+        <section class="col-lg-8">
+            <div class="card shadow-sm"><div class="card-header bg-white d-flex justify-content-between"><strong>Alert feed</strong><span class="text-muted small" th:text="${#lists.size(alerts)} + ' active'">0 active</span></div>
+                <div class="table-responsive"><table class="table table-hover align-middle mb-0"><thead><tr><th>Severity</th><th>Rules</th><th>Score</th><th>Explanation</th><th>Last seen</th></tr></thead>
+                    <tbody><tr th:each="alert : ${alerts}"><td><span class="badge" th:classappend="${alert.severity.name() == 'HIGH' ? 'text-bg-danger' : (alert.severity.name() == 'MEDIUM' ? 'text-bg-warning' : 'text-bg-info')}" th:text="${alert.severity}">HIGH</span></td><td th:text="${alert.ruleCodes}">R1</td><td th:text="${alert.score}">30</td><td><a th:href="@{/dashboard/alerts/{id}(id=${alert.alertId})}" th:text="${alert.explanation}" class="text-decoration-none text-truncate d-inline-block alert-explanation">Details</a></td><td class="small" th:text="${#temporals.format(alert.lastSeen, 'dd MMM HH:mm:ss')}">now</td></tr>
+                    <tr th:if="${#lists.isEmpty(alerts)}"><td colspan="5" class="text-center text-muted py-4">No open alerts. Run a simulator scenario to generate activity.</td></tr></tbody>
+                </table></div>
+            </div>
+        </section>
+        <section class="col-lg-4"><div class="card shadow-sm"><div class="card-header bg-white"><strong>Recent activity</strong></div><ul class="list-group list-group-flush"><li class="list-group-item" th:each="entry : ${recentLogs}"><div class="d-flex justify-content-between"><strong th:text="${entry.usernameAttempted}">user</strong><span class="badge" th:classappend="${entry.outcome.name() == 'ALLOWED' ? 'text-bg-success' : (entry.outcome.name() == 'DENIED' ? 'text-bg-warning' : 'text-bg-danger')}" th:text="${entry.outcome}">ALLOWED</span></div><small class="text-muted" th:text="${entry.action + ' · ' + entry.reason}">VIEW</small></li><li th:if="${#lists.isEmpty(recentLogs)}" class="list-group-item text-muted">No access events yet.</li></ul></div></section>
+    </div>
+</main>
+</body></html>

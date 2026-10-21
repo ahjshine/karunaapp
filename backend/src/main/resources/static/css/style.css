@@ -1,0 +1,7 @@
+body { min-height: 100vh; }
+.navbar-brand { letter-spacing: .02em; }
+.kpi-card { border-width: 0 0 0 4px; }
+.alert-explanation { max-width: 300px; }
+.record-content { white-space: pre-wrap; line-height: 1.65; }
+.integrity-icon { width: 82px; height: 82px; border: 3px solid currentColor; border-radius: 50%; display: grid; place-items: center; margin: 0 auto 1rem; font-size: 3rem; font-weight: 700; }
+.card { border-radius: .75rem; }
