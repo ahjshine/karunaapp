@@ -1,52 +1,21 @@
 package com.medsentinel.logging;
 
-import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
-@Entity
-@Table(name = "access_log")
 public class AccessLog {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "log_id")
     private Long logId;
-
-    @Column(name = "ts", nullable = false)
     private LocalDateTime ts;
-
-    @Column(name = "user_id")
     private Long userId;
-
-    @Column(name = "username_attempted", nullable = false)
     private String usernameAttempted;
-
-    @Column(name = "ip", nullable = false)
     private String ip;
-
-    @Column(name = "action", nullable = false)
     private String action;
-
-    @Column(name = "resource_type")
     private String resourceType;
-
-    @Column(name = "resource_id")
     private Long resourceId;
-
-    @Column(name = "patient_id")
     private Long patientId;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "outcome", nullable = false)
     private Outcome outcome;
-
-    @Column(name = "reason")
     private String reason;
-
-    @Column(name = "prev_hash")
     private String prevHash;
-
-    @Column(name = "row_hash")
     private String rowHash;
 
     public enum Outcome { ALLOWED, DENIED, FAILED }

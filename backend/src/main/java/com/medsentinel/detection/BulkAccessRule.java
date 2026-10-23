@@ -7,8 +7,6 @@ import com.medsentinel.logging.AccessLogRepository;
 import com.medsentinel.rbac.AccessGuard;
 import com.medsentinel.rbac.RoleBaseline;
 import com.medsentinel.rbac.RoleBaselineRepository;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -18,7 +16,6 @@ import java.util.*;
  * R2: Unusually large retrieval — records read in 10 min > role baseline × multiplier.
  * Includes busy-clinician guard: on-ward/care-team access uses a higher baseline.
  */
-@Component
 public class BulkAccessRule implements DetectionRule {
 
     private final AccessLogRepository accessLogRepo;
@@ -30,8 +27,15 @@ public class BulkAccessRule implements DetectionRule {
     public BulkAccessRule(AccessLogRepository accessLogRepo,
                           UserRepository userRepo,
                           RoleBaselineRepository baselineRepo,
+                          AccessGuard accessGuard) {
+        this(accessLogRepo, userRepo, baselineRepo, accessGuard, 10);
+    }
+
+    public BulkAccessRule(AccessLogRepository accessLogRepo,
+                          UserRepository userRepo,
+                          RoleBaselineRepository baselineRepo,
                           AccessGuard accessGuard,
-                          @Value("${detection.window-minutes:10}") int windowMinutes) {
+                          int windowMinutes) {
         this.accessLogRepo = accessLogRepo;
         this.userRepo = userRepo;
         this.baselineRepo = baselineRepo;
@@ -50,7 +54,6 @@ public class BulkAccessRule implements DetectionRule {
 
     @Override
     public List<RuleHit> evaluate(AccessLog triggeringEntry) {
-        // Only evaluate on allowed VIEW/SEARCH/EXPORT events
         if (triggeringEntry.getOutcome() != AccessLog.Outcome.ALLOWED) {
             return Collections.emptyList();
         }
@@ -63,14 +66,14 @@ public class BulkAccessRule implements DetectionRule {
 
         Long userId = triggeringEntry.getUserId();
         User user = userRepo.findById(userId).orElse(null);
-        if (user == null) return Collections.emptyList();
+        if (user == null || user.getRole() == null) return Collections.emptyList();
 
-        LocalDateTime since = LocalDateTime.now().minusMinutes(windowMinutes);
+        LocalDateTime eventTime = triggeringEntry.getTs() != null ? triggeringEntry.getTs() : LocalDateTime.now();
+        LocalDateTime since = eventTime.minusMinutes(windowMinutes);
         List<AccessLog> recentAccess = accessLogRepo.findAllowedAccessByUserSince(userId, since);
 
         if (recentAccess.isEmpty()) return Collections.emptyList();
 
-        // Split into on-ward and off-ward counts
         int onWardCount = 0;
         int offWardCount = 0;
         List<Long> allLogIds = new ArrayList<>();

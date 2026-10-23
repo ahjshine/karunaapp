@@ -1,10 +1,5 @@
 package com.medsentinel.logging;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -14,26 +9,61 @@ import java.util.List;
  * Manages the SHA-256 hash chain on access_log rows.
  * Each row's hash = SHA-256(prev_hash + canonical_row_string).
  */
-@Service
 public class LogChainService {
 
-    private static final Logger log = LoggerFactory.getLogger(LogChainService.class);
+    private static final String GENESIS_HASH = "0".repeat(64);
     private final AccessLogRepository accessLogRepo;
+
+    public LogChainService() {
+        this(new AccessLogRepository());
+    }
 
     public LogChainService(AccessLogRepository accessLogRepo) {
         this.accessLogRepo = accessLogRepo;
     }
 
     /**
-     * Compute and store the hash for a newly inserted log entry.
-     * The caller resolves the preceding hash before inserting the new row.
+     * Append a log entry using the latest row as its predecessor.
+     * The synchronized method keeps concurrent writers in this JVM ordered.
      */
-    @Transactional
-    public void chainHash(AccessLog entry, String previousHash) {
-        String prevHash = previousHash != null ? previousHash : "0".repeat(64);
+    public synchronized AccessLog append(AccessLog entry) {
+        if (entry == null) {
+            throw new IllegalArgumentException("Access log entry is required");
+        }
+
+        AccessLog previousEntry = accessLogRepo.findTopByOrderByLogIdDesc();
+        String previousHash = previousEntry != null ? previousEntry.getRowHash() : GENESIS_HASH;
+        if (previousEntry != null && (previousHash == null || previousHash.isBlank())) {
+            throw new IllegalStateException("Cannot append to an incomplete hash chain");
+        }
+
+        return append(entry, previousHash);
+    }
+
+    public synchronized AccessLog append(AccessLog entry, String previousHash) {
+        if (entry == null) {
+            throw new IllegalArgumentException("Access log entry is required");
+        }
+        if (entry.getLogId() == null) {
+            entry.setLogId(accessLogRepo.nextId());
+        }
+
+        applyHash(entry, previousHash);
+        return accessLogRepo.append(entry);
+    }
+
+    /**
+     * Compute and store a hash when the caller already has the predecessor hash.
+     * This is useful for sequential bulk imports such as the demo data seeder.
+     */
+    public synchronized void chainHash(AccessLog entry, String previousHash) {
+        append(entry, previousHash);
+    }
+
+    private void applyHash(AccessLog entry, String previousHash) {
+        String prevHash = previousHash != null ? previousHash : GENESIS_HASH;
         entry.setPrevHash(prevHash);
         entry.setRowHash(sha256(prevHash + "|" + entry.toCanonicalString()));
-        accessLogRepo.save(entry);
     }
 
     /**
@@ -46,27 +76,29 @@ public class LogChainService {
             return new ChainVerificationResult(true, null, 0, 0);
         }
 
-        String prevHash = "0".repeat(64);
+        String prevHash = GENESIS_HASH;
         int checked = 0;
 
         for (AccessLog entry : allLogs) {
             checked++;
 
             // Check prev_hash linkage
-            if (entry.getPrevHash() != null && !entry.getPrevHash().equals(prevHash)) {
+            if (!prevHash.equals(entry.getPrevHash())) {
                 return new ChainVerificationResult(false, entry.getLogId(), checked, allLogs.size());
             }
 
             // Verify row_hash
-            if (entry.getRowHash() != null) {
-                String canonical = entry.getPrevHash() + "|" + entry.toCanonicalString();
-                String expectedHash = sha256(canonical);
-                if (!expectedHash.equals(entry.getRowHash())) {
-                    return new ChainVerificationResult(false, entry.getLogId(), checked, allLogs.size());
-                }
+            if (entry.getRowHash() == null || entry.getRowHash().isBlank()) {
+                return new ChainVerificationResult(false, entry.getLogId(), checked, allLogs.size());
             }
 
-            prevHash = entry.getRowHash() != null ? entry.getRowHash() : prevHash;
+            String canonical = entry.getPrevHash() + "|" + entry.toCanonicalString();
+            String expectedHash = sha256(canonical);
+            if (!expectedHash.equals(entry.getRowHash())) {
+                return new ChainVerificationResult(false, entry.getLogId(), checked, allLogs.size());
+            }
+
+            prevHash = entry.getRowHash();
         }
 
         return new ChainVerificationResult(true, null, checked, allLogs.size());

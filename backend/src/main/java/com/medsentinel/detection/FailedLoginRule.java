@@ -2,27 +2,26 @@ package com.medsentinel.detection;
 
 import com.medsentinel.logging.AccessLog;
 import com.medsentinel.logging.AccessLogRepository;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * R1: Repeated failed logins — ≥5 failures per user or IP in 5 min.
+ * R1: Repeated failed logins — >=5 failures per user or IP in 5 min.
  * R1b: Successful login right after R1 triggers.
  */
-@Component
 public class FailedLoginRule implements DetectionRule {
 
     private final AccessLogRepository accessLogRepo;
     private final int threshold;
     private final int windowMinutes;
 
-    public FailedLoginRule(AccessLogRepository accessLogRepo,
-                           @Value("${detection.failed-login-threshold:5}") int threshold,
-                           @Value("${detection.failed-login-window-minutes:5}") int windowMinutes) {
+    public FailedLoginRule(AccessLogRepository accessLogRepo) {
+        this(accessLogRepo, 5, 5);
+    }
+
+    public FailedLoginRule(AccessLogRepository accessLogRepo, int threshold, int windowMinutes) {
         this.accessLogRepo = accessLogRepo;
         this.threshold = threshold;
         this.windowMinutes = windowMinutes;
@@ -39,13 +38,14 @@ public class FailedLoginRule implements DetectionRule {
 
     @Override
     public List<RuleHit> evaluate(AccessLog triggeringEntry) {
-        // Only evaluate on LOGIN events
         if (!"LOGIN".equals(triggeringEntry.getAction())) {
             return Collections.emptyList();
         }
 
-        LocalDateTime since = LocalDateTime.now().minusMinutes(windowMinutes);
-        List<AccessLog> failures = accessLogRepo.findFailedLoginsSince(since);
+        LocalDateTime eventTime = triggeringEntry.getTs() != null ? triggeringEntry.getTs() : LocalDateTime.now();
+        LocalDateTime since = eventTime.minusMinutes(windowMinutes);
+        List<AccessLog> failures = accessLogRepo.findFailedLoginsForAttemptSince(
+            triggeringEntry.getUsernameAttempted(), triggeringEntry.getIp(), since);
 
         List<RuleHit> hits = new ArrayList<>();
 
@@ -75,6 +75,7 @@ public class FailedLoginRule implements DetectionRule {
 
                 // R1b: Check if there was a successful login after the failures
                 if (triggeringEntry.getOutcome() == AccessLog.Outcome.ALLOWED
+                        && triggeringEntry.getUsernameAttempted() != null
                         && triggeringEntry.getUsernameAttempted().equals(username)) {
                     List<Long> r1bEvidence = new ArrayList<>(logIds);
                     r1bEvidence.add(triggeringEntry.getLogId());
@@ -97,7 +98,6 @@ public class FailedLoginRule implements DetectionRule {
             String ip = entry.getKey();
             List<AccessLog> ipFailures = entry.getValue();
 
-            // Only flag if multiple usernames attempted from same IP
             long distinctUsers = ipFailures.stream()
                 .map(AccessLog::getUsernameAttempted).distinct().count();
 

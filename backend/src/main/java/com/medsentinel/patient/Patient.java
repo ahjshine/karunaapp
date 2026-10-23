@@ -1,24 +1,12 @@
 package com.medsentinel.patient;
 
-import jakarta.persistence.*;
 import java.time.LocalDate;
 
-@Entity
-@Table(name = "patients")
 public class Patient {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "patient_id")
     private Long patientId;
-
-    @Column(name = "name", nullable = false)
     private String name;
-
-    @Column(name = "dob", nullable = false)
     private LocalDate dob;
-
-    @Column(name = "ward_id", nullable = false)
     private Long wardId;
 
     public Patient() {}

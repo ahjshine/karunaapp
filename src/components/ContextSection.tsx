@@ -65,8 +65,8 @@ export function ContextSection() {
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#14b8a6]/10 text-[#14b8a6]">
                   <CheckCircle2 className="h-4 w-4" />
                 </div>
-                <div className="mt-3 text-xs font-bold text-[#0b1220]">HIPAA Ready</div>
-                <div className="mt-0.5 text-[11px] text-[#53635f]">Full compliance audit records & export</div>
+                <div className="mt-3 text-xs font-bold text-[#0b1220]">Audit-ready</div>
+                <div className="mt-0.5 text-[11px] text-[#53635f]">Exportable demo evidence and access history</div>
               </div>
             </div>
           </div>

@@ -19,7 +19,7 @@ class OutOfScopeRuleTest {
             .action("VIEW").resourceType("CLINICAL").patientId(1L)
             .outcome(AccessLog.Outcome.DENIED).reason("Role BILLING lacks permission VIEW_CLINICAL");
         denied.setLogId(23L);
-        when(repo.findDeniedAccessSince(any())).thenReturn(List.of(denied));
+        when(repo.findDeniedAccessForUserSince(eq(3L), eq("clerk.ravi"), any())).thenReturn(List.of(denied));
 
         RuleHit hit = rule.evaluate(denied).get(0);
 

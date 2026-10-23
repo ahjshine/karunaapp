@@ -2,15 +2,12 @@ package com.medsentinel.simulator;
 
 import com.medsentinel.alert.AlertService;
 import com.medsentinel.logging.AccessLog;
+import com.medsentinel.logging.AccessLogRepository;
 import com.medsentinel.logging.AccessLogService;
 import com.medsentinel.auth.User;
 import com.medsentinel.auth.UserRepository;
 import com.medsentinel.patient.Patient;
 import com.medsentinel.patient.PatientRepository;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Random;
@@ -18,27 +15,25 @@ import java.util.Random;
 /**
  * Runs demo scenarios to generate realistic access log traffic.
  */
-@Service
 public class ScenarioRunner {
 
-    private static final Logger log = LoggerFactory.getLogger(ScenarioRunner.class);
     private final AccessLogService accessLogService;
     private final AlertService alertService;
     private final UserRepository userRepo;
     private final PatientRepository patientRepo;
-    private final JdbcTemplate jdbcTemplate;
+    private final AccessLogRepository accessLogRepo;
     private final Random random = new Random();
 
     public ScenarioRunner(AccessLogService accessLogService,
                           AlertService alertService,
                           UserRepository userRepo,
                           PatientRepository patientRepo,
-                          JdbcTemplate jdbcTemplate) {
+                          AccessLogRepository accessLogRepo) {
         this.accessLogService = accessLogService;
         this.alertService = alertService;
         this.userRepo = userRepo;
         this.patientRepo = patientRepo;
-        this.jdbcTemplate = jdbcTemplate;
+        this.accessLogRepo = accessLogRepo;
     }
 
     /**
@@ -62,7 +57,6 @@ public class ScenarioRunner {
             count++;
         }
 
-        log.info("Scenario: Normal nurse shift — {} chart views", count);
         return String.format("Normal nurse shift: %d charts viewed (own ward). Expected: no alerts.", count);
     }
 
@@ -76,7 +70,6 @@ public class ScenarioRunner {
         List<Patient> wardPatients = patientRepo.findByWardId(nurse.getWardId());
 
         int count = 0;
-        // Open up to 40 charts, cycling through ward patients
         for (int i = 0; i < 40 && !wardPatients.isEmpty(); i++) {
             Patient p = wardPatients.get(i % wardPatients.size());
             accessLogService.logAccess(new AccessLog()
@@ -90,7 +83,6 @@ public class ScenarioRunner {
             count++;
         }
 
-        log.info("Scenario: Busy clinician burst — {} chart views", count);
         return String.format("Busy clinician burst: %d own-ward charts in rapid succession. Expected: NO alerts (on-ward baseline = 50).", count);
     }
 
@@ -122,7 +114,6 @@ public class ScenarioRunner {
             .outcome(AccessLog.Outcome.ALLOWED)
             .reason("Authentication successful after brute force"));
 
-        log.info("Scenario: Brute-force login attack on {}", targetUser);
         return String.format("Brute-force login: 6 failed + 1 success for '%s' from IP %s. Expected: R1 (30pts) + R1b (25pts) = Medium alert.", targetUser, attackerIp);
     }
 
@@ -137,7 +128,7 @@ public class ScenarioRunner {
 
         int count = 0;
         // First, denied clinical access attempts (R3)
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 5 && !allPatients.isEmpty(); i++) {
             Patient p = allPatients.get(i % allPatients.size());
             accessLogService.logAccess(new AccessLog()
                 .userId(clerk.getUserId())
@@ -151,7 +142,7 @@ public class ScenarioRunner {
         }
 
         // Then bulk billing record access (R2)
-        for (int i = 0; i < 38; i++) {
+        for (int i = 0; i < 38 && !allPatients.isEmpty(); i++) {
             Patient p = allPatients.get(i % allPatients.size());
             accessLogService.logAccess(new AccessLog()
                 .userId(clerk.getUserId())
@@ -164,7 +155,6 @@ public class ScenarioRunner {
             count++;
         }
 
-        log.info("Scenario: Billing clerk bulk pull — {} events", count);
         return String.format("Billing clerk bulk pull: %d total access events (5 clinical denied + 38 billing). Expected: R3 (40pts) + R2 (35pts) = High alert.", count);
     }
 
@@ -174,7 +164,10 @@ public class ScenarioRunner {
     public String runReceptionistReadsClinical() {
         User rec = userRepo.findByUsername("rec.neha")
             .orElseThrow(() -> new RuntimeException("rec.neha not found"));
-        Patient patient = patientRepo.findAll().get(0);
+        List<Patient> patients = patientRepo.findAll();
+        if (patients.isEmpty()) return "No patients available.";
+
+        Patient patient = patients.get(0);
 
         accessLogService.logAccess(new AccessLog()
             .userId(rec.getUserId())
@@ -185,7 +178,6 @@ public class ScenarioRunner {
             .outcome(AccessLog.Outcome.DENIED)
             .reason("Role RECEPTIONIST lacks permission VIEW_CLINICAL"));
 
-        log.info("Scenario: Receptionist attempted clinical access");
         return String.format("Receptionist clinical access: denied for '%s'. Expected: R3 alert (40pts = Medium).", rec.getUsername());
     }
 
@@ -195,9 +187,8 @@ public class ScenarioRunner {
     public String runBreakGlass() {
         User doctor = userRepo.findByUsername("dr.asha")
             .orElseThrow(() -> new RuntimeException("dr.asha not found"));
-        // Pick a patient NOT in the doctor's ward
         Patient offWardPatient = patientRepo.findAll().stream()
-            .filter(p -> !p.getWardId().equals(doctor.getWardId()))
+            .filter(p -> p.getWardId() != null && !p.getWardId().equals(doctor.getWardId()))
             .findFirst()
             .orElseThrow(() -> new RuntimeException("No off-ward patient found"));
 
@@ -210,44 +201,31 @@ public class ScenarioRunner {
             .outcome(AccessLog.Outcome.ALLOWED)
             .reason("Break-glass: Emergency consult, patient in distress"));
 
-        // Break-glass is always a Medium reviewer item, even when the access itself is valid.
         alertService.createOrMergeAlert(doctor.getUserId(), "BREAK_GLASS", 50, "MEDIUM",
             String.format("Break-glass access by %s on off-ward patient '%s'. Justification: Emergency consult, patient in distress",
                 doctor.getUsername(), offWardPatient.getName()),
             List.of(logEntry.getLogId()));
 
-        log.info("Scenario: Break-glass by {} on patient {}", doctor.getUsername(), offWardPatient.getName());
         return String.format("Break-glass: %s accessed off-ward patient '%s'. Expected: Medium review alert.", doctor.getUsername(), offWardPatient.getName());
     }
 
     /**
-     * Tamper a log row — directly updates a row to demonstrate integrity break.
+     * Tamper a log row — directly updates a row in MongoDB to demonstrate integrity break.
      */
     public String tamperLogRow() {
         try {
-            // Find a row to tamper
-            Long logId = jdbcTemplate.queryForObject(
-                "SELECT log_id FROM access_log WHERE row_hash IS NOT NULL ORDER BY log_id LIMIT 1 OFFSET 5",
-                Long.class);
-
-            if (logId == null) {
-                return "No log rows available to tamper. Run some scenarios first.";
+            List<AccessLog> allLogs = accessLogRepo.findAllOrderedById();
+            if (allLogs.size() < 6) {
+                return "Not enough log rows to tamper. Run some scenarios first.";
             }
 
-            // This session variable is honored only by the append-only trigger for this
-            // controlled demo. Normal app sessions cannot update audit rows.
-            jdbcTemplate.execute("SET @allow_log_tamper = 1");
-            try {
-                jdbcTemplate.update(
-                    "UPDATE access_log SET reason = 'TAMPERED_FOR_DEMO' WHERE log_id = ?", logId);
-            } finally {
-                jdbcTemplate.execute("SET @allow_log_tamper = NULL");
-            }
+            AccessLog logToTamper = allLogs.get(5);
+            logToTamper.setReason("TAMPERED_FOR_DEMO");
+            accessLogRepo.updateForTamper(logToTamper);
 
-            log.warn("Scenario: Tampered log row {}", logId);
-            return String.format("Tampered log row %d. Run 'Verify Integrity' to detect the break.", logId);
+            return String.format("Tampered log row %d. Run 'Verify Integrity' to detect the break.", logToTamper.getLogId());
         } catch (Exception e) {
-            return "Could not tamper log: " + e.getMessage();
+            return "Could not tamper log for the demonstration.";
         }
     }
 }

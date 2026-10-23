@@ -64,23 +64,43 @@ const ALERTS: AlertItem[] = [
   {
     id: "A-104",
     severity: "low",
-    title: "Concurrent session detected across two workstations.",
-    description: "ED Station 3 & Station 7",
-    actor: "Dr. Alex Wong",
-    role: "Emergency Physician",
-    tags: ["Session anomaly"],
+    title: "Receptionist attempted to open a clinical note.",
+    description: "Access was denied (403).",
+    actor: "Maya Patel",
+    role: "Receptionist",
+    tags: ["R3 Out-of-scope"],
     timeAgo: "1h ago",
   },
 ]
 
+const PREVIEW_TOOLS = [
+  {
+    label: "Scenario simulator",
+    description: "Preview access patterns before testing a response.",
+  },
+  {
+    label: "Baselines",
+    description: "Review the role and ward context behind the sample alerts.",
+  },
+  {
+    label: "Users & roles",
+    description: "Inspect the sample users and permissions represented in this preview.",
+  },
+] as const
+
+type PreviewToolLabel = (typeof PREVIEW_TOOLS)[number]["label"]
+
 export function DashboardPreview({ onInspectAlert }: DashboardPreviewProps) {
   const [activeTab, setActiveTab] = useState<"all" | "high" | "medium" | "low">("all")
   const [selectedAlertId, setSelectedAlertId] = useState<string>("A-101")
+  const [selectedTool, setSelectedTool] = useState<PreviewToolLabel | null>(null)
 
   const filteredAlerts = ALERTS.filter((a) => {
     if (activeTab === "all") return true
     return a.severity === activeTab
   })
+
+  const selectedToolInfo = PREVIEW_TOOLS.find((tool) => tool.label === selectedTool)
 
   return (
     <div className="relative mx-auto w-full max-w-6xl">
@@ -99,11 +119,11 @@ export function DashboardPreview({ onInspectAlert }: DashboardPreviewProps) {
 
           <div className="flex items-center gap-2 rounded-md border border-[#2a3950] bg-[#0f172a]/70 px-4 py-1 text-xs text-[#738299]">
             <Lock className="h-3 w-3 text-emerald-400" />
-            <span className="font-mono">secure.karuna.health</span>
+             <span className="font-mono">demo.karuna.local</span>
           </div>
 
           <div className="font-mono text-[10px] tracking-wider text-[#738299] uppercase">
-            Clinical Overview
+            Demo Overview
           </div>
         </div>
 
@@ -126,24 +146,36 @@ export function DashboardPreview({ onInspectAlert }: DashboardPreviewProps) {
                   Monitor
                 </span>
                 <nav className="mt-1 space-y-1">
-                  <button className="flex w-full items-center gap-2.5 rounded-md bg-[#14b8a6]/10 px-2.5 py-1.5 font-medium text-[#5eead4]">
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2.5 rounded-md bg-[#14b8a6]/10 px-2.5 py-1.5 font-medium text-[#5eead4]"
+                  >
                     <Activity className="h-3.5 w-3.5" />
                     <span>Overview</span>
                   </button>
-                  <button className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-[#8fa0b6] hover:bg-white/5 hover:text-white">
-                    <div className="flex items-center gap-2.5">
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-[#8fa0b6] hover:bg-white/5 hover:text-white"
+                  >
+                    <span className="flex items-center gap-2.5">
                       <AlertTriangle className="h-3.5 w-3.5" />
                       <span>Alerts</span>
-                    </div>
+                    </span>
                     <Badge variant="outline" className="border-rose-500/30 bg-rose-500/10 px-1 py-0 text-[10px] text-rose-300">
                       4
                     </Badge>
                   </button>
-                  <button className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[#8fa0b6] hover:bg-white/5 hover:text-white">
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[#8fa0b6] hover:bg-white/5 hover:text-white"
+                  >
                     <FileText className="h-3.5 w-3.5" />
                     <span>Log explorer</span>
                   </button>
-                  <button className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[#8fa0b6] hover:bg-white/5 hover:text-white">
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[#8fa0b6] hover:bg-white/5 hover:text-white"
+                  >
                     <Users className="h-3.5 w-3.5" />
                     <span>Clinical access</span>
                   </button>
@@ -155,10 +187,32 @@ export function DashboardPreview({ onInspectAlert }: DashboardPreviewProps) {
                   Tools
                 </span>
                 <nav className="mt-1 space-y-0.5 text-[#8fa0b6]">
-                  <div className="rounded-md px-2.5 py-1 hover:text-white cursor-pointer">Scenario simulator</div>
-                  <div className="rounded-md px-2.5 py-1 hover:text-white cursor-pointer">Baselines</div>
-                  <div className="rounded-md px-2.5 py-1 hover:text-white cursor-pointer">Users & roles</div>
+                  {PREVIEW_TOOLS.map((tool) => (
+                    <button
+                      key={tool.label}
+                      type="button"
+                      aria-pressed={selectedTool === tool.label}
+                      onClick={() => setSelectedTool(tool.label)}
+                      className={`w-full rounded-md px-2.5 py-1 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#14b8a6]/60 ${
+                        selectedTool === tool.label
+                          ? "bg-white/10 text-white"
+                          : "text-[#8fa0b6] hover:bg-white/5 hover:text-white"
+                      }`}
+                    >
+                      {tool.label}
+                    </button>
+                  ))}
                 </nav>
+                {selectedToolInfo && (
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    className="mt-2 rounded-md border border-[#284152] bg-[#132638] px-2.5 py-2 text-[10px] text-[#b7f7e9]"
+                  >
+                    <div className="font-semibold">{selectedToolInfo.label}</div>
+                    <p className="mt-1 leading-relaxed text-[#94a3b8]">{selectedToolInfo.description}</p>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -183,7 +237,7 @@ export function DashboardPreview({ onInspectAlert }: DashboardPreviewProps) {
                 <div className="font-mono text-[10px] tracking-wider text-[#77879e] uppercase">
                   St. Anne’s Hospital
                 </div>
-                <div className="text-sm font-semibold text-[#f8fafc]">Security Overview</div>
+                 <div className="text-sm font-semibold text-[#f8fafc]">Security Overview · Demo</div>
               </div>
 
               <div className="flex items-center gap-3">
@@ -200,12 +254,12 @@ export function DashboardPreview({ onInspectAlert }: DashboardPreviewProps) {
             {/* Welcome Banner */}
             <div className="flex flex-wrap items-end justify-between border-b border-[#24334a]/40 p-4 sm:p-5">
               <div>
-                <h3 className="text-lg font-bold text-[#f8fafc]">Good morning, Marcus</h3>
-                <p className="text-xs text-[#77879e]">Here’s what needs your attention across St. Anne’s Hospital.</p>
+                 <h3 className="text-lg font-bold text-[#f8fafc]">Sample security briefing</h3>
+                 <p className="text-xs text-[#77879e]">Illustrative activity from the local MedSentinel demo engine.</p>
               </div>
               <div className="flex items-center gap-2 font-mono text-xs text-[#8ba39f]">
                 <Clock className="h-3.5 w-3.5" />
-                <span>Mon, 12 Oct · 09:42</span>
+                 <span>Local demo data · updates on interaction</span>
               </div>
             </div>
 
@@ -252,6 +306,7 @@ export function DashboardPreview({ onInspectAlert }: DashboardPreviewProps) {
                   <Button
                     variant="ghost"
                     size="sm"
+                    type="button"
                     className="h-7 text-[11px] font-semibold text-[#14b8a6] hover:bg-[#14b8a6]/10"
                     onClick={() => onInspectAlert?.("A-101")}
                   >
@@ -262,6 +317,7 @@ export function DashboardPreview({ onInspectAlert }: DashboardPreviewProps) {
                 {/* Filter Tabs */}
                 <div className="mb-3 flex items-center gap-1.5 border-y border-[#24334a] py-1.5 text-[11px]">
                   <button
+                    type="button"
                     onClick={() => setActiveTab("all")}
                     className={`rounded px-2.5 py-0.5 font-medium transition ${
                       activeTab === "all" ? "bg-[#26374b] text-[#dbe5ee]" : "text-[#718198] hover:text-white"
@@ -270,6 +326,7 @@ export function DashboardPreview({ onInspectAlert }: DashboardPreviewProps) {
                     All 4
                   </button>
                   <button
+                    type="button"
                     onClick={() => setActiveTab("high")}
                     className={`rounded px-2.5 py-0.5 font-medium transition ${
                       activeTab === "high" ? "bg-[#26374b] text-rose-300" : "text-[#718198] hover:text-white"
@@ -278,6 +335,7 @@ export function DashboardPreview({ onInspectAlert }: DashboardPreviewProps) {
                     High 1
                   </button>
                   <button
+                    type="button"
                     onClick={() => setActiveTab("medium")}
                     className={`rounded px-2.5 py-0.5 font-medium transition ${
                       activeTab === "medium" ? "bg-[#26374b] text-amber-300" : "text-[#718198] hover:text-white"
@@ -286,6 +344,7 @@ export function DashboardPreview({ onInspectAlert }: DashboardPreviewProps) {
                     Medium 2
                   </button>
                   <button
+                    type="button"
                     onClick={() => setActiveTab("low")}
                     className={`rounded px-2.5 py-0.5 font-medium transition ${
                       activeTab === "low" ? "bg-[#26374b] text-blue-300" : "text-[#718198] hover:text-white"
@@ -298,21 +357,24 @@ export function DashboardPreview({ onInspectAlert }: DashboardPreviewProps) {
                 {/* Alert Rows */}
                 <div className="space-y-2">
                   {filteredAlerts.map((alert) => (
-                    <div
+                    <button
                       key={alert.id}
+                      type="button"
+                      aria-label={`Inspect ${alert.id}: ${alert.title}`}
+                      aria-pressed={selectedAlertId === alert.id}
                       onClick={() => {
                         setSelectedAlertId(alert.id)
                         onInspectAlert?.(alert.id)
                       }}
-                      className={`group flex cursor-pointer items-start justify-between rounded-lg border p-3 transition ${
+                      className={`group flex w-full items-start justify-between rounded-lg border p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#14b8a6]/60 ${
                         selectedAlertId === alert.id
                           ? "border-[#14b8a6] bg-[#14b8a6]/[0.06]"
                           : "border-[#24334a]/80 bg-[#0e1726]/60 hover:border-[#3a4d6b]"
                       }`}
                     >
-                      <div className="flex items-start gap-3">
+                      <span className="flex min-w-0 items-start gap-3">
                         {/* Severity Badge */}
-                        <div
+                        <span
                           className={`mt-0.5 flex items-center gap-1.5 rounded px-2 py-0.5 text-[10px] font-semibold ${
                             alert.severity === "high"
                               ? "bg-rose-500/10 text-rose-300"
@@ -331,21 +393,19 @@ export function DashboardPreview({ onInspectAlert }: DashboardPreviewProps) {
                             }`}
                           />
                           <span className="capitalize">{alert.severity}</span>
-                        </div>
+                        </span>
 
-                        <div>
-                          <div className="flex items-center gap-2">
+                        <span className="min-w-0">
+                          <span className="flex items-center gap-2">
                             <span className="font-mono text-[10px] text-[#5f7289]">{alert.id}</span>
                             <span className="font-mono text-[9px] text-emerald-400">OPEN</span>
-                          </div>
-                          <p className="mt-0.5 text-xs font-semibold text-[#f8fafc] group-hover:text-[#5eead4]">
+                          </span>
+                          <span className="mt-0.5 block text-xs font-semibold text-[#f8fafc] group-hover:text-[#5eead4]">
                             {alert.title}
-                          </p>
-                          <p className="text-[11px] text-[#73849b]">{alert.description}</p>
-                          <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-[#77899f]">
-                            <span>
-                              {alert.actor} · {alert.role}
-                            </span>
+                          </span>
+                          <span className="block text-[11px] text-[#73849b]">{alert.description}</span>
+                          <span className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-[#77899f]">
+                            <span>{alert.actor} · {alert.role}</span>
                             {alert.tags.map((tag) => (
                               <Badge
                                 key={tag}
@@ -355,15 +415,15 @@ export function DashboardPreview({ onInspectAlert }: DashboardPreviewProps) {
                                 {tag}
                               </Badge>
                             ))}
-                          </div>
-                        </div>
-                      </div>
+                          </span>
+                        </span>
+                      </span>
 
-                      <div className="flex flex-col items-end gap-2 text-right">
+                      <span className="flex shrink-0 flex-col items-end gap-2 text-right">
                         <span className="font-mono text-[10px] text-[#73849b]">{alert.timeAgo}</span>
                         <ChevronRight className="h-4 w-4 text-slate-500 transition-transform group-hover:translate-x-1 group-hover:text-[#14b8a6]" />
-                      </div>
-                    </div>
+                      </span>
+                    </button>
                   ))}
                 </div>
               </div>

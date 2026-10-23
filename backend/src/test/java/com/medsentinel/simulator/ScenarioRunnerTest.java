@@ -4,13 +4,13 @@ import com.medsentinel.alert.AlertService;
 import com.medsentinel.auth.User;
 import com.medsentinel.auth.UserRepository;
 import com.medsentinel.logging.AccessLog;
+import com.medsentinel.logging.AccessLogRepository;
 import com.medsentinel.logging.AccessLogService;
 import com.medsentinel.patient.Patient;
 import com.medsentinel.patient.PatientRepository;
 import com.medsentinel.rbac.Role;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -25,7 +25,7 @@ class ScenarioRunnerTest {
     private AlertService alertService;
     private UserRepository userRepo;
     private PatientRepository patientRepo;
-    private JdbcTemplate jdbcTemplate;
+    private AccessLogRepository logRepo;
     private ScenarioRunner runner;
 
     private User nurse;
@@ -40,9 +40,9 @@ class ScenarioRunnerTest {
         alertService = mock(AlertService.class);
         userRepo = mock(UserRepository.class);
         patientRepo = mock(PatientRepository.class);
-        jdbcTemplate = mock(JdbcTemplate.class);
+        logRepo = mock(AccessLogRepository.class);
 
-        runner = new ScenarioRunner(accessLogService, alertService, userRepo, patientRepo, jdbcTemplate);
+        runner = new ScenarioRunner(accessLogService, alertService, userRepo, patientRepo, logRepo);
 
         Role nurseRole = new Role("NURSE");
         nurseRole.setRoleId(2L);

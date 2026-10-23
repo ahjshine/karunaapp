@@ -10,7 +10,6 @@ import com.medsentinel.patient.PatientRepository;
 import com.medsentinel.patient.RecordRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 
 import java.util.List;
 import java.util.Optional;
@@ -42,10 +41,10 @@ class BreakGlassServiceTest {
         service = new BreakGlassService(breakGlassRepo, patientRepo, recordRepo, accessLogService, alertService);
 
         doctor = new AppUserDetails(1L, "dr.asha", "pass", "DOCTOR", 1L,
-            List.of(new SimpleGrantedAuthority("ROLE_DOCTOR")));
+            List.of("ROLE_DOCTOR", "VIEW_CLINICAL"));
 
         nurse = new AppUserDetails(2L, "nurse.priya", "pass", "NURSE", 1L,
-            List.of(new SimpleGrantedAuthority("ROLE_NURSE")));
+            List.of("ROLE_NURSE"));
 
         patient = new Patient();
         patient.setPatientId(15L);

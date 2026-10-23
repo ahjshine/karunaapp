@@ -5,11 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "backend:java": "java -jar backend/target/medsentinel-1.0.0.jar --spring.datasource.url=\"jdbc:h2:mem:medsentinel;MODE=MySQL;DB_CLOSE_DELAY=-1\" --spring.datasource.driver-class-name=\"org.h2.Driver\" --spring.datasource.username=\"sa\" --spring.datasource.password=\"\" --spring.jpa.hibernate.ddl-auto=\"create\" --server.port=8080",
-    "backend:mysql": "java -jar backend/target/medsentinel-1.0.0.jar --server.port=8080",
+    "backend:java": "java -jar backend/target/medsentinel-1.0.0.jar",
+    "backend:mongo": "java -jar backend/target/medsentinel-1.0.0.jar",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "backend:build": "backend\\mvnw.cmd -f backend/pom.xml clean package",
+    "backend:test": "backend\\mvnw.cmd -f backend/pom.xml test",
+    "backend:package": "backend\\mvnw.cmd -f backend/pom.xml package"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.3.0",

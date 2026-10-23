@@ -3,7 +3,6 @@ package com.medsentinel.detection;
 import com.medsentinel.auth.User;
 import com.medsentinel.auth.UserRepository;
 import com.medsentinel.logging.AccessLog;
-import org.springframework.stereotype.Component;
 
 import java.time.LocalTime;
 import java.util.Collections;
@@ -12,7 +11,6 @@ import java.util.List;
 /**
  * R4: Off-hours access — access outside assigned shift hours.
  */
-@Component
 public class OffHoursRule implements DetectionRule {
 
     private final UserRepository userRepo;

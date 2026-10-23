@@ -1,28 +1,13 @@
 package com.medsentinel.rbac;
 
-import jakarta.persistence.*;
 import java.math.BigDecimal;
 
-@Entity
-@Table(name = "role_baselines")
 public class RoleBaseline {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "baseline_id")
     private Long baselineId;
-
-    @Column(name = "role_id", nullable = false)
     private Long roleId;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "scope", nullable = false)
     private BaselineScope scope;
-
-    @Column(name = "max_records_per_10min", nullable = false)
     private Integer maxRecordsPer10Min;
-
-    @Column(name = "multiplier", nullable = false)
     private BigDecimal multiplier;
 
     public enum BaselineScope { ON_WARD, OFF_WARD, CLINICAL, ANY }

@@ -1,48 +1,23 @@
 package com.medsentinel.alert;
 
-import jakarta.persistence.*;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
-@Entity
-@Table(name = "alerts")
 public class Alert {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "alert_id")
     private Long alertId;
-
-    @Column(name = "user_id")
     private Long userId;
-
-    @Column(name = "rule_codes", nullable = false)
     private String ruleCodes;
-
-    @Column(name = "score", nullable = false)
     private Integer score;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "severity", nullable = false)
     private Severity severity;
-
-    @Column(name = "explanation", columnDefinition = "TEXT", nullable = false)
     private String explanation;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false)
     private AlertStatus status = AlertStatus.OPEN;
-
-    @Column(name = "reviewer_note")
     private String reviewerNote;
-
-    @Column(name = "first_seen", nullable = false)
     private LocalDateTime firstSeen;
-
-    @Column(name = "last_seen", nullable = false)
     private LocalDateTime lastSeen;
-
-    @Column(name = "event_count", nullable = false)
     private Integer eventCount = 1;
+    private List<Long> evidenceLogIds = new ArrayList<>();
 
     public enum Severity {
         LOW, MEDIUM, HIGH;
@@ -84,4 +59,6 @@ public class Alert {
     public void setLastSeen(LocalDateTime lastSeen) { this.lastSeen = lastSeen; }
     public Integer getEventCount() { return eventCount; }
     public void setEventCount(Integer eventCount) { this.eventCount = eventCount; }
+    public List<Long> getEvidenceLogIds() { return evidenceLogIds; }
+    public void setEvidenceLogIds(List<Long> evidenceLogIds) { this.evidenceLogIds = evidenceLogIds; }
 }

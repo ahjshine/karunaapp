@@ -1,6 +1,17 @@
-import { useState, type ReactNode } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import Clinical from "@/Clinical"
-import { medEngine } from "@/lib/medsentinelEngine"
+import {
+  MedSentinelApiError,
+  getAccessCapabilities,
+  medsentinelApi,
+  type AccessCapabilities,
+  type AlertStatus,
+  type AlertViewModel,
+  type AdminUserViewModel,
+  type BaselineViewModel,
+  type IntegrityViewModel,
+  type StatsViewModel,
+} from "@/lib/medsentinelApi"
 import {
   Activity,
   AlertTriangle,
@@ -29,14 +40,33 @@ import {
   Zap,
 } from "lucide-react"
 
-type View = "dashboard" | "alert" | "logs" | "clinician" | "simulator"
-type Severity = "High" | "Medium" | "Low"
+type View = "dashboard" | "alert" | "logs" | "clinician" | "simulator" | "baselines" | "users"
+type Severity = AlertViewModel["severity"]
 
 interface MedSentinelDashboardProps {
   onLogout: () => void
   initialView?: View
   initialRole?: string
   initialUser?: string
+  initialUsername?: string
+  initialPermissions?: string[]
+}
+
+function formatToday() {
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date())
+}
+
+function departmentForAlert(role: string) {
+  const normalized = role.toLowerCase()
+  if (normalized.includes("billing")) return "Patient Accounts"
+  if (normalized.includes("reception")) return "Front Desk"
+  if (normalized.includes("physician") || normalized.includes("nurse")) return "Clinical Operations"
+  return "Security Operations"
 }
 
 function SeverityPill({ level }: { level: Severity }) {
@@ -58,14 +88,18 @@ function Header({
   userName,
   userRole,
   onMenu,
+  onOpenAlerts,
   onLogout,
+  canViewAlerts,
 }: {
   title: string
   eyebrow: string
   userName: string
   userRole: string
   onMenu: () => void
+  onOpenAlerts: () => void
   onLogout: () => void
+  canViewAlerts: boolean
 }) {
   const initials = userName
     .split(" ")
@@ -88,12 +122,12 @@ function Header({
       <div className="topbar-actions">
         <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full border border-teal-500/30 bg-teal-500/10 text-[10px] font-mono text-[#5eead4]">
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-          <span>MEDSENTINEL CORE · PORT 5173 NATIVE</span>
+           <span>MEDSENTINEL CORE · API SESSION</span>
         </div>
-        <button className="icon-button" aria-label="Notifications" title="3 unread security alerts">
+        {canViewAlerts && <button className="icon-button" aria-label="Notifications" title="3 unread security alerts" onClick={onOpenAlerts}>
           <Bell size={19} />
           <span className="notification-dot" />
-        </button>
+        </button>}
         <div className="divider" />
         <div className="user-meta">
           <strong>{userName}</strong>
@@ -122,19 +156,21 @@ function Sidebar({
   open,
   close,
   onLogout,
+  capabilities,
 }: {
   view: View
   setView: (view: View) => void
   open: boolean
   close: () => void
   onLogout: () => void
+  capabilities: AccessCapabilities
 }) {
   const nav = [
-    { id: "dashboard" as View, label: "Overview", icon: LayoutDashboard },
-    { id: "alert" as View, label: "Alerts", icon: AlertTriangle, badge: "4" },
-    { id: "logs" as View, label: "Log explorer", icon: FileSearch },
-    { id: "clinician" as View, label: "Clinical access", icon: UsersRound },
-  ]
+    { id: "dashboard" as View, label: "Overview", icon: LayoutDashboard, visible: capabilities.canViewStats },
+    { id: "alert" as View, label: "Alerts", icon: AlertTriangle, badge: "4", visible: capabilities.canViewAlerts },
+    { id: "logs" as View, label: "Log explorer", icon: FileSearch, visible: capabilities.canViewLogs },
+    { id: "clinician" as View, label: "Clinical access", icon: UsersRound, visible: capabilities.canUseClinicalWorkspace },
+  ].filter((item) => item.visible)
 
   return (
     <aside className={`sidebar ${open ? "sidebar-open" : ""}`}>
@@ -168,8 +204,8 @@ function Sidebar({
             {item.badge && <b>{item.badge}</b>}
           </button>
         ))}
-        <span className="nav-label nav-label-spaced">Tools</span>
-        <button
+        {capabilities.canAdmin && <span className="nav-label nav-label-spaced">Tools</span>}
+        {capabilities.canAdmin && <button
           className={`nav-item ${view === "simulator" ? "active" : ""}`}
           onClick={() => {
             setView("simulator")
@@ -178,39 +214,39 @@ function Sidebar({
         >
           <FlaskConical size={18} />
           <span>Scenario simulator</span>
-        </button>
-        <button
-          className="nav-item"
+        </button>}
+        {capabilities.canAdmin && <button
+          className={`nav-item ${view === "baselines" ? "active" : ""}`}
           onClick={() => {
-            setView("dashboard")
+            setView("baselines")
             close()
           }}
         >
           <SlidersHorizontal size={18} />
           <span>Baselines</span>
-        </button>
-        <button
-          className="nav-item"
+        </button>}
+        {capabilities.canAdmin && <button
+          className={`nav-item ${view === "users" ? "active" : ""}`}
           onClick={() => {
-            setView("clinician")
+            setView("users")
             close()
           }}
         >
           <UserRound size={18} />
           <span>Users & roles</span>
-        </button>
+        </button>}
       </nav>
       <div className="sidebar-status">
         <div className="status-row">
           <span className="live-dot" />
-          System operational
+           Backend session active
         </div>
         <div className="integrity-row">
           <ShieldCheck size={16} />
-          <span>Log chain verified</span>
-          <Check size={15} />
-        </div>
-        <small>Checked 4 minutes ago</small>
+           <span>{capabilities.canViewLogs ? "Integrity check available" : "Role-scoped access"}</span>
+           <Check size={15} />
+         </div>
+         <small>{capabilities.canViewLogs ? "Verify in Log explorer" : "Only permitted workspaces are shown"}</small>
       </div>
       <button className="signout" onClick={onLogout}>
         <LogOut size={17} />
@@ -245,62 +281,98 @@ function KPICard({
   )
 }
 
-function Dashboard({ openAlert }: { openAlert: (id?: string) => void }) {
+function Dashboard({ openAlert, onOpenAlerts, userName }: { openAlert: (id?: string) => void; onOpenAlerts: () => void; userName: string }) {
   const [severityFilter, setSeverityFilter] = useState("All")
-  const alerts = medEngine.getAlerts()
+  const [alerts, setAlerts] = useState<AlertViewModel[]>([])
+  const [stats, setStats] = useState<StatsViewModel | null>(null)
+  const [integrity, setIntegrity] = useState<IntegrityViewModel | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [errorMessage, setErrorMessage] = useState("")
+  const [dateSnapshot] = useState(() => ({
+    date: formatToday(),
+    time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+  }))
+
+  useEffect(() => {
+    let cancelled = false
+    setIsLoading(true)
+    setErrorMessage("")
+    void Promise.all([medsentinelApi.listAlerts(), medsentinelApi.getStats(), medsentinelApi.verifyIntegrity()])
+      .then(([nextAlerts, nextStats, nextIntegrity]) => {
+        if (cancelled) return
+        setAlerts(nextAlerts)
+        setStats(nextStats)
+        setIntegrity(nextIntegrity)
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) setErrorMessage(error instanceof Error ? error.message : "Unable to load live dashboard data.")
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const highCount = alerts.filter((alert) => alert.severity === "High").length
+  const mediumCount = alerts.filter((alert) => alert.severity === "Medium").length
+  const lowCount = alerts.filter((alert) => alert.severity === "Low").length
+  const openAlertCount = stats?.openAlerts ?? (errorMessage ? "—" : alerts.length)
+  const highSeverityCount = stats?.highSeverity ?? (errorMessage ? "—" : highCount)
+  const failedLoginCount = stats?.failedLogins ?? (errorMessage ? "—" : "…")
 
   return (
     <main className="page dashboard-page">
       <section className="welcome">
         <div>
-          <h2>Good morning, Marcus</h2>
-          <p>Here’s what needs your attention across St. Anne’s Hospital.</p>
-        </div>
-        <div className="date-chip">
-          <Clock3 size={16} />
-          Mon, 12 Oct 2026 <span>·</span> 09:42
-        </div>
+           <h2>Good morning, {userName}</h2>
+           <p>Here’s what needs your attention across St. Anne’s Hospital.</p>
+         </div>
+         <div className="date-chip">
+           <Clock3 size={16} />
+           {dateSnapshot.date} <span>·</span> {dateSnapshot.time}
+         </div>
       </section>
+
+      {errorMessage && <div className="baseline-note" role="status">Live dashboard data is unavailable: {errorMessage}</div>}
 
       <section className="kpi-grid">
         <KPICard
           label="Open alerts"
-          value={alerts.length}
+          value={isLoading ? "…" : openAlertCount}
           hint={
             <>
-              <span className="up">↑ 1</span> since yesterday
+            {isLoading ? "Loading from backend" : "Current backend count"}
             </>
           }
           icon={<Bell size={19} />}
         />
         <KPICard
           label="High severity"
-          value={alerts.filter((a) => a.severity === "High").length}
-          hint="Requires immediate review"
+          value={isLoading ? "…" : highSeverityCount}
+          hint={errorMessage ? "Backend count unavailable" : "Requires immediate review"}
           icon={<AlertTriangle size={19} />}
           tone="danger"
         />
         <KPICard
           label="Failed logins · 24h"
-          value="12"
-          hint={
-            <>
-              <span className="down">↓ 20%</span> from prior day
-            </>
-          }
+          value={isLoading ? "…" : failedLoginCount}
+          hint="Backend count · rolling 24 hours"
           icon={<LockKeyhole size={19} />}
         />
         <KPICard
           label="Log integrity"
           value={
             <span className="verified-value">
-              <CheckCircle2 size={21} />
-              Verified
+              <ShieldCheck size={21} />
+              {isLoading ? "Checking" : integrity ? integrity.intact ? "Verified" : "Broken" : "Unavailable"}
             </span>
           }
-          hint="12,408 rows · 4 min ago"
+          hint={integrity ? `${integrity.rowsChecked} checked · ${integrity.totalRows} total` : "Verify in Log explorer"}
           icon={<ShieldCheck size={19} />}
-          tone="success"
+          tone={integrity?.intact ? "success" : integrity ? "danger" : ""}
         />
       </section>
 
@@ -311,8 +383,8 @@ function Dashboard({ openAlert }: { openAlert: (id?: string) => void }) {
               <h3>Open alerts</h3>
               <p>Events that differ from role and ward baselines</p>
             </div>
-            <button className="btn btn-ghost" onClick={() => setSeverityFilter("All")}>
-              View all <span>→</span>
+           <button className="btn btn-ghost" onClick={onOpenAlerts}>
+             View all <span>→</span>
             </button>
           </div>
           <div className="filter-row">
@@ -320,25 +392,25 @@ function Dashboard({ openAlert }: { openAlert: (id?: string) => void }) {
               className={`filter ${severityFilter === "All" ? "active" : ""}`}
               onClick={() => setSeverityFilter("All")}
             >
-              All <b>4</b>
+               All <b>{alerts.length}</b>
             </button>
             <button
               className={`filter ${severityFilter === "High" ? "active" : ""}`}
               onClick={() => setSeverityFilter("High")}
             >
-              High <b>1</b>
+               High <b>{highCount}</b>
             </button>
             <button
               className={`filter ${severityFilter === "Medium" ? "active" : ""}`}
               onClick={() => setSeverityFilter("Medium")}
             >
-              Medium <b>2</b>
+               Medium <b>{mediumCount}</b>
             </button>
             <button
               className={`filter ${severityFilter === "Low" ? "active" : ""}`}
               onClick={() => setSeverityFilter("Low")}
             >
-              Low <b>1</b>
+               Low <b>{lowCount}</b>
             </button>
             <button className="filter filter-date">
               <Clock3 size={14} />
@@ -347,16 +419,22 @@ function Dashboard({ openAlert }: { openAlert: (id?: string) => void }) {
             </button>
           </div>
           <div className="alert-list">
-            {alerts
-              .filter((alert) => severityFilter === "All" || alert.severity === severityFilter)
-              .map((alert) => (
+             {isLoading ? (
+               <div className="baseline-note">Loading live alerts…</div>
+             ) : errorMessage ? (
+               <div className="baseline-note">No live alerts are displayed until the backend is reachable.</div>
+             ) : alerts.length === 0 ? (
+               <div className="baseline-note">No open alerts were returned by the backend.</div>
+             ) : alerts
+               .filter((alert) => severityFilter === "All" || alert.severity === severityFilter)
+               .map((alert) => (
                 <button key={alert.alertId} className="alert-row" onClick={() => openAlert(alert.alertId)}>
                   <div className={`alert-accent ${alert.severity.toLowerCase()}`} />
                   <div className="alert-main">
                     <div className="alert-row-top">
                       <SeverityPill level={alert.severity} />
                       <span className="alert-id">{alert.alertId}</span>
-                      <span className="alert-id">{localStorage.getItem(`status-${alert.alertId}`) || "Open"}</span>
+                       <span className="alert-id">{alert.status}</span>
                       <span className="alert-time">{alert.timeAgo}</span>
                       <MoreHorizontal size={18} />
                     </div>
@@ -370,7 +448,7 @@ function Dashboard({ openAlert }: { openAlert: (id?: string) => void }) {
                       <span className="rule-list">
                         {alert.rules.map((rule) => (
                           <RuleChip key={rule}>{rule}</RuleChip>
-                        ))}
+             ))}
                       </span>
                       <span className="event-count">×{alert.count} events</span>
                     </div>
@@ -381,113 +459,170 @@ function Dashboard({ openAlert }: { openAlert: (id?: string) => void }) {
         </div>
 
         <aside className="right-column">
-          <div className="panel activity-panel">
-            <div className="panel-header compact">
-              <div>
-                <h3>Access activity</h3>
-                <p>Events by hour · today</p>
-              </div>
-              <button className="mini-select">
-                24h <ChevronDown size={13} />
-              </button>
-            </div>
-            <div className="chart-legend">
-              <span>
-                <i className="allowed-dot" />
-                Allowed
-              </span>
-              <span>
-                <i className="failed-dot" />
-                Failed
-              </span>
-            </div>
-            <div className="chart">
-              <div className="chart-labels">
-                <span>800</span>
-                <span>600</span>
-                <span>400</span>
-                <span>200</span>
-                <span>0</span>
-              </div>
-              <svg viewBox="0 0 360 150" preserveAspectRatio="none" aria-label="Access events chart">
-                <defs>
-                  <linearGradient id="area" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#14b8a6" stopOpacity=".3" />
-                    <stop offset="100%" stopColor="#14b8a6" stopOpacity="0" />
-                  </linearGradient>
-                </defs>
-                <g className="grid-lines">
-                  <path d="M0 10H360M0 42H360M0 74H360M0 106H360M0 138H360" />
-                </g>
-                <path
-                  className="area"
-                  d="M0 124 C35 118,44 112,67 115 S106 99,128 101 S164 75,186 82 S222 50,244 61 S281 40,301 62 S335 48,360 29 L360 138 L0 138Z"
-                />
-                <path
-                  className="allowed-line"
-                  d="M0 124 C35 118,44 112,67 115 S106 99,128 101 S164 75,186 82 S222 50,244 61 S281 40,301 62 S335 48,360 29"
-                />
-                <path
-                  className="failed-line"
-                  d="M0 135 L52 133 L92 136 L138 129 L178 135 L218 125 L260 133 L300 119 L360 129"
-                />
-                <circle cx="300" cy="119" r="3.5" fill="#ef4444" />
-              </svg>
-              <div className="chart-times">
-                <span>00:00</span>
-                <span>06:00</span>
-                <span>12:00</span>
-                <span>18:00</span>
-                <span>Now</span>
-              </div>
-            </div>
-          </div>
-          <div className="panel risk-panel">
-            <div className="panel-header compact">
-              <div>
-                <h3>Top-risk users</h3>
-                <p>Ranked by current activity</p>
-              </div>
-              <button className="btn btn-ghost">View all</button>
-            </div>
-            {[
-              ["ER", "Elena Ruiz", "Billing clerk", "75", "high"],
-              ["AM", "Dr. Asha Mehta", "Physician", "55", "medium"],
-              ["MP", "Maya Patel", "Receptionist", "40", "low"],
-            ].map((user, index) => (
-              <div className="risk-user" key={user[1]}>
-                <span className="rank">0{index + 1}</span>
-                <div className="small-avatar">{user[0]}</div>
-                <div>
-                  <strong>{user[1]}</strong>
-                  <span>{user[2]}</span>
-                </div>
-                <b className={`score ${user[4]}`}>{user[3]}</b>
-              </div>
-            ))}
-          </div>
-          <div className="suppressed-note">
-            <CheckCircle2 size={18} />
-            <div>
-              <strong>No alert — within baseline</strong>
-              <span>Nurse Priya opened 40 on-ward charts in 9 min. Baseline: 60.</span>
-            </div>
-          </div>
+           <div className="panel activity-panel">
+             <div className="panel-header compact">
+               <div>
+                 <h3>Access activity</h3>
+                 <p>Aggregate counts are available from the backend</p>
+               </div>
+               <RuleChip>Stats API</RuleChip>
+             </div>
+             <div className="baseline-note">Hourly activity data is outside the current API contract, so no illustrative chart is shown.</div>
+           </div>
+           <div className="panel risk-panel">
+             <div className="panel-header compact">
+               <div>
+                 <h3>Top-risk users</h3>
+                 <p>User risk ranking is not returned by the API</p>
+               </div>
+               <button className="btn btn-ghost" onClick={onOpenAlerts}>View alerts</button>
+             </div>
+             <div className="baseline-note">Review live alert context and backend logs for actor-level evidence.</div>
+           </div>
+           <div className="suppressed-note">
+             <CheckCircle2 size={18} />
+             <div>
+               <strong>Backend baseline context</strong>
+               <span>Hourly activity and user-risk rankings are outside the current API response.</span>
+             </div>
+           </div>
         </aside>
       </section>
     </main>
   )
 }
 
-function AlertDetail({ alertId = "A-101", back }: { alertId?: string; back: () => void }) {
-  const [status, updateStatus] = useState(localStorage.getItem(`status-${alertId}`) || "Open")
+function AlertDetail({ alertId = "A-101", back, canReviewActions }: { alertId?: string; back: () => void; canReviewActions: boolean }) {
+  const [detail, setDetail] = useState<Awaited<ReturnType<typeof medsentinelApi.getAlert>> | null>(null)
+  const [status, updateStatus] = useState<AlertStatus>("Open")
   const [confirm, setConfirm] = useState("")
   const [note, setNote] = useState("")
   const [error, setError] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+  const [errorMessage, setErrorMessage] = useState("")
+  const [actionError, setActionError] = useState("")
+  const [actionLoading, setActionLoading] = useState(false)
 
-  const setStatus = (value: string) => {
-    updateStatus(value)
-    localStorage.setItem(`status-${alertId}`, value)
+  useEffect(() => {
+    let cancelled = false
+    setIsLoading(true)
+    setErrorMessage("")
+    const loadAlert = async () => {
+      try {
+        return await medsentinelApi.getAlert(alertId)
+      } catch (error: unknown) {
+        if (!(error instanceof MedSentinelApiError) || error.status !== 404 || alertId !== "A-101") throw error
+        const alerts = await medsentinelApi.listAlerts()
+        const firstAlert = alerts[0]
+        if (!firstAlert) throw error
+        return medsentinelApi.getAlert(firstAlert.alertId)
+      }
+    }
+    void loadAlert()
+      .then((nextDetail) => {
+        if (cancelled) return
+        setDetail(nextDetail)
+        updateStatus(nextDetail.alert.status)
+      })
+      .catch((nextError: unknown) => {
+        if (!cancelled) {
+          setDetail(null)
+          setErrorMessage(nextError instanceof Error ? nextError.message : "Unable to load the live alert.")
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [alertId])
+
+  const alert = detail?.alert
+
+  if (isLoading) {
+    return (
+      <main className="page detail-page">
+        <button className="back-link" onClick={back}>
+          <ArrowLeft size={17} />
+          Back to alerts
+        </button>
+        <section className="panel p-6">
+          <h2>Loading live alert…</h2>
+          <p className="muted">Fetching alert evidence from the MedSentinel backend.</p>
+        </section>
+      </main>
+    )
+  }
+
+  if (!alert || !detail) {
+    return (
+      <main className="page detail-page">
+        <button className="back-link" onClick={back}>
+          <ArrowLeft size={17} />
+          Back to alerts
+        </button>
+        <section className="panel p-6">
+          <h2>Live alert unavailable</h2>
+          <p className="muted">{errorMessage || "This alert was not returned by the backend."}</p>
+        </section>
+      </main>
+    )
+  }
+
+  const evidenceRows: string[][] = detail.evidenceLogs.length > 0
+    ? detail.evidenceLogs.slice(0, 4).map((log) => [
+        `#${log.logId}`,
+        log.ts,
+        log.action,
+        log.patientRef || "—",
+        log.outcome,
+        log.hash ? `${log.hash.slice(0, 4)}…${log.hash.slice(-4)}` : "—",
+      ])
+    : [["—", "—", "No evidence", "—", "—", "—"]]
+
+  const statusAction = (value: AlertStatus) => {
+    switch (value) {
+      case "Acknowledged":
+        return "acknowledge"
+      case "Escalated":
+        return "escalate"
+      case "False positive":
+        return "false_positive"
+      default:
+        return "open"
+    }
+  }
+
+  const setStatus = async (value: AlertStatus, reason = "Status updated", actionNote = "") => {
+    setActionLoading(true)
+    setActionError("")
+    try {
+      const updated = await medsentinelApi.updateAlertAction(alert.numericAlertId, statusAction(value), actionNote)
+      updateStatus(updated.status)
+      setDetail((current) => current ? { ...current, alert: updated } : current)
+      return true
+    } catch (nextError: unknown) {
+      setActionError(nextError instanceof Error ? nextError.message : `Unable to apply ${reason.toLowerCase()}.`)
+      return false
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleConfirm = async () => {
+    if (confirm === "Mark false positive" && !note.trim()) {
+      setError(true)
+      return
+    }
+    const targetStatus: AlertStatus = confirm === "Escalate alert" ? "Escalated" : "False positive"
+    const updated = await setStatus(targetStatus, confirm, note)
+    if (updated) {
+      setConfirm("")
+      setNote("")
+      setError(false)
+    }
   }
 
   return (
@@ -499,20 +634,20 @@ function AlertDetail({ alertId = "A-101", back }: { alertId?: string; back: () =
       <div className="detail-title">
         <div>
           <div className="title-line">
-            <SeverityPill level="High" />
-            <span>{alertId}</span>
-            <span>Detected 2 minutes ago</span>
+            <SeverityPill level={alert.severity} />
+            <span>{alert.alertId}</span>
+            <span>Detected {alert.timeAgo}</span>
           </div>
-          <h2>Unusual clinical record access</h2>
+          <h2>{alert.text.split(".")[0]}</h2>
         </div>
-        <button
-          className="status-select"
-          onClick={() => setStatus(status === "Open" ? "Acknowledged" : "Open")}
-        >
-          <span className="live-dot" />
-          {status}
-          <ChevronDown size={15} />
-        </button>
+         {canReviewActions ? <button
+           className="status-select"
+           onClick={() => void setStatus(status === "Open" ? "Acknowledged" : "Open")}
+         >
+           <span className="live-dot" />
+           {status}
+           <ChevronDown size={15} />
+         </button> : <span className="status-select"><span className="live-dot" />{status}</span>}
       </div>
       <section className="why-box">
         <div className="why-icon">
@@ -520,12 +655,10 @@ function AlertDetail({ alertId = "A-101", back }: { alertId?: string; back: () =
         </div>
         <div>
           <span className="eyebrow">Why this was flagged</span>
-          <p>
-            Billing clerk opened <strong>38 clinical records in 7 minutes.</strong> Role baseline for clinical
-            records is <strong>0.</strong>
-          </p>
+          <p>{alert.text}</p>
           <small>
-            This is unusual for Elena Ruiz’s role and differs from her previous access patterns.
+            Rules involved: <strong>{alert.rules.join(" · ")}</strong>. Review the linked evidence before deciding on a
+            follow-up action.
           </small>
         </div>
       </section>
@@ -537,47 +670,43 @@ function AlertDetail({ alertId = "A-101", back }: { alertId?: string; back: () =
               <p>Demonstration risk score · not a probability of wrongdoing</p>
             </div>
             <strong>
-              75 <small>/ 100 · High</small>
+              {alert.score} <small>/ 100 · {alert.severity}</small>
             </strong>
           </div>
           <div className="score-bar">
-            <span className="r2" />
-            <span className="r3" />
-            <span className="empty" />
+            <span className="r2" style={{ width: `${alert.score}%` }} />
+            <span className="empty" style={{ width: `${100 - alert.score}%` }} />
           </div>
           <div className="score-keys">
-            <span>
-              <i className="r2-key" />
-              <b>R2 Bulk access</b>
-              <strong>+35</strong>
-            </span>
-            <span>
-              <i className="r3-key" />
-              <b>R3 Out-of-scope</b>
-              <strong>+40</strong>
-            </span>
+             {alert.rules.map((rule, index) => (
+               <span key={rule}>
+                <i className={index % 2 === 0 ? "r2-key" : "r3-key"} />
+                <b>{rule}</b>
+                <strong>+{Math.round(alert.score / alert.rules.length)}</strong>
+              </span>
+            ))}
           </div>
         </section>
         <section className="panel context-card">
           <div className="section-heading">
             <div>
               <h3>User context</h3>
-              <p>Elena Ruiz · Billing clerk</p>
+              <p>{alert.user} · {alert.role}</p>
             </div>
-            <div className="small-avatar">ER</div>
+            <div className="small-avatar">{alert.user.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</div>
           </div>
           <dl>
             <div>
               <dt>Department</dt>
-              <dd>Patient Accounts</dd>
+              <dd>{departmentForAlert(alert.role)}</dd>
             </div>
             <div>
               <dt>Shift</dt>
-              <dd>08:00–16:00</dd>
+              <dd>Role schedule</dd>
             </div>
             <div>
               <dt>Clinical baseline</dt>
-              <dd>0 records</dd>
+              <dd>{alert.role.toLowerCase().includes("billing") ? "0 records" : "Role-scoped"}</dd>
             </div>
           </dl>
         </section>
@@ -586,21 +715,15 @@ function AlertDetail({ alertId = "A-101", back }: { alertId?: string; back: () =
         <div className="panel-header">
           <div>
             <h3>Evidence</h3>
-            <p>38 access events linked to this alert</p>
+            <p>{alert.count} access {alert.count === 1 ? "event" : "events"} linked to this alert</p>
           </div>
           <button
             className="btn btn-secondary"
             onClick={() => {
-              const data = [
-                { id: "#12408", time: "09:38:12", action: "OPEN_CLINICAL", patient: "P-4812", outcome: "Allowed", hash: "8f3a…c91d" },
-                { id: "#12407", time: "09:38:03", action: "OPEN_CLINICAL", patient: "P-1037", outcome: "Allowed", hash: "2b7e…a042" },
-                { id: "#12406", time: "09:37:54", action: "OPEN_CLINICAL", patient: "P-2291", outcome: "Allowed", hash: "71cd…b813" },
-                { id: "#12405", time: "09:37:42", action: "OPEN_CLINICAL", patient: "P-5510", outcome: "Allowed", hash: "c244…9e80" },
-              ]
-              const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data, null, 2))
+              const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(evidenceRows, null, 2))
               const a = document.createElement("a")
               a.href = dataStr
-              a.download = `evidence-${alertId}.json`
+              a.download = `evidence-${alert.alertId}.json`
               a.click()
             }}
           >
@@ -616,12 +739,7 @@ function AlertDetail({ alertId = "A-101", back }: { alertId?: string; back: () =
             <span>OUTCOME</span>
             <span>HASH</span>
           </div>
-          {[
-            ["#12408", "09:38:12", "OPEN_CLINICAL", "P-4812", "Allowed", "8f3a…c91d"],
-            ["#12407", "09:38:03", "OPEN_CLINICAL", "P-1037", "Allowed", "2b7e…a042"],
-            ["#12406", "09:37:54", "OPEN_CLINICAL", "P-2291", "Allowed", "71cd…b813"],
-            ["#12405", "09:37:42", "OPEN_CLINICAL", "P-5510", "Allowed", "c244…9e80"],
-          ].map((row) => (
+          {evidenceRows.map((row) => (
             <div className="evidence-row" key={row[0]}>
               {row.map((cell, i) => (
                 <span key={cell} className={i === 4 ? "outcome-ok" : ""}>
@@ -633,7 +751,7 @@ function AlertDetail({ alertId = "A-101", back }: { alertId?: string; back: () =
           ))}
         </div>
       </section>
-      <div className="action-bar">
+       {canReviewActions && <div className="action-bar">
         <span>
           <ShieldCheck size={18} />
           All actions are logged with your reviewer ID
@@ -648,7 +766,7 @@ function AlertDetail({ alertId = "A-101", back }: { alertId?: string; back: () =
           >
             Mark false positive
           </button>
-          <button className="btn btn-secondary" onClick={() => setStatus("Acknowledged")}>
+           <button className="btn btn-secondary" onClick={() => void setStatus("Acknowledged", "Alert acknowledged")} disabled={actionLoading}>
             Acknowledge
           </button>
           <button
@@ -661,12 +779,12 @@ function AlertDetail({ alertId = "A-101", back }: { alertId?: string; back: () =
             Escalate alert
           </button>
         </div>
-      </div>
+       </div>}
       {confirm && (
         <div className="modal-backdrop">
           <section className="reviewer-dialog" role="dialog" aria-modal="true" aria-labelledby="review-title">
             <h3 id="review-title">{confirm}</h3>
-            <p>{alertId} · Your reviewer action will be recorded in the demo audit trail.</p>
+             <p>{alertId} · Your reviewer action will be recorded by the backend.</p>
             <label>
               {confirm === "Mark false positive" ? "Explanation (required)" : "Reviewer note (optional)"}
               <textarea value={note} onChange={(e) => setNote(e.target.value)} />
@@ -678,19 +796,13 @@ function AlertDetail({ alertId = "A-101", back }: { alertId?: string; back: () =
               </button>
               <button
                 className="btn btn-primary"
-                onClick={() => {
-                  if (confirm === "Mark false positive" && !note.trim()) {
-                    setError(true)
-                    return
-                  }
-                  setStatus(confirm === "Escalate alert" ? "Escalated" : "False positive")
-                  setConfirm("")
-                  setNote("")
-                }}
-              >
-                Confirm action
-              </button>
-            </div>
+                 onClick={() => void handleConfirm()}
+                 disabled={actionLoading}
+               >
+                 {actionLoading ? "Saving…" : "Confirm action"}
+               </button>
+             </div>
+             {actionError && <p className="dialog-error">{actionError}</p>}
           </section>
         </div>
       )}
@@ -698,38 +810,87 @@ function AlertDetail({ alertId = "A-101", back }: { alertId?: string; back: () =
   )
 }
 
-function LogExplorer() {
+function LogExplorer({ canAdmin }: { canAdmin: boolean }) {
   const [integrity, setIntegrity] = useState<"idle" | "pass" | "fail">("idle")
   const [brokenId, setBrokenId] = useState<number | undefined>(undefined)
+  const [integrityDetails, setIntegrityDetails] = useState<IntegrityViewModel | null>(null)
+  const [logs, setLogs] = useState<Awaited<ReturnType<typeof medsentinelApi.listLogs>>>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [isVerifying, setIsVerifying] = useState(false)
+  const [errorMessage, setErrorMessage] = useState("")
   const [search, setSearch] = useState("")
+  const [outcomeFilter, setOutcomeFilter] = useState("All")
+  const [actionFilter, setActionFilter] = useState("All")
+  const [timeRange, setTimeRange] = useState("24h")
 
-  const logs = medEngine.getLogs().filter((l) => {
-    if (!search.trim()) return true
-    const q = search.toLowerCase()
-    return (
+  useEffect(() => {
+    let cancelled = false
+    setIsLoading(true)
+    setErrorMessage("")
+    void medsentinelApi
+      .listLogs()
+      .then((nextLogs) => {
+        if (!cancelled) setLogs(nextLogs)
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) setErrorMessage(error instanceof Error ? error.message : "Unable to load live audit logs.")
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const filteredLogs = logs.filter((l) => {
+    const q = search.toLowerCase().trim()
+    const matchesSearch = !q || (
       l.username.toLowerCase().includes(q) ||
       (l.patientRef && l.patientRef.toLowerCase().includes(q)) ||
       l.action.toLowerCase().includes(q) ||
       l.reason.toLowerCase().includes(q)
     )
+    const matchesOutcome = outcomeFilter === "All" || l.outcome === outcomeFilter
+    const matchesAction = actionFilter === "All" || l.action === actionFilter
+    return matchesSearch && matchesOutcome && matchesAction
   })
 
-  const handleVerify = () => {
-    const res = medEngine.verifyIntegrity()
-    setIntegrity(res.status)
-    setBrokenId(res.brokenLogId)
+  const applyIntegrity = (result: IntegrityViewModel) => {
+    setIntegrityDetails(result)
+    setIntegrity(result.intact ? "pass" : "fail")
+    setBrokenId(result.brokenAtLogId ?? undefined)
   }
 
-  const handleTamper = () => {
-    medEngine.runScenario("Tamper log row")
-    const res = medEngine.verifyIntegrity()
-    setIntegrity(res.status)
-    setBrokenId(res.brokenLogId)
+  const handleVerify = async () => {
+    setIsVerifying(true)
+    setErrorMessage("")
+    try {
+      applyIntegrity(await medsentinelApi.verifyIntegrity())
+    } catch (error: unknown) {
+      setErrorMessage(error instanceof Error ? error.message : "Unable to verify log integrity.")
+    } finally {
+      setIsVerifying(false)
+    }
+  }
+
+  const handleTamper = async () => {
+    setIsVerifying(true)
+    setErrorMessage("")
+    try {
+      await medsentinelApi.runSimulator("tamper-log")
+      applyIntegrity(await medsentinelApi.verifyIntegrity())
+    } catch (error: unknown) {
+      setErrorMessage(error instanceof Error ? error.message : "Unable to run the backend tamper scenario.")
+    } finally {
+      setIsVerifying(false)
+    }
   }
 
   const handleReset = () => {
-    medEngine.resetTamper()
     setIntegrity("idle")
+    setIntegrityDetails(null)
     setBrokenId(undefined)
   }
 
@@ -740,18 +901,19 @@ function LogExplorer() {
           <h2>Log explorer</h2>
           <p>Search and verify every access event across the organization.</p>
         </div>
-        <button className="btn btn-primary" onClick={handleVerify}>
+        <button className="btn btn-primary" onClick={() => void handleVerify()} disabled={isVerifying}>
           <ShieldCheck size={17} />
-          Verify integrity
+          {isVerifying ? "Checking…" : "Verify integrity"}
         </button>
       </section>
+      {errorMessage && <div className="baseline-note" role="status">Live log data is unavailable: {errorMessage}</div>}
       <div className="audit-demo-controls">
         <span>Append-only SHA-256 cryptographic chain validation.</span>
-        <button className="btn btn-secondary" onClick={handleTamper}>
-          Run tamper demonstration
-        </button>
+         {canAdmin && <button className="btn btn-secondary" onClick={() => void handleTamper()} disabled={isVerifying}>
+           Run backend tamper scenario
+         </button>}
         <button className="btn btn-ghost" onClick={handleReset}>
-          Reset demo
+          Clear result
         </button>
       </div>
       {integrity !== "idle" && (
@@ -760,8 +922,8 @@ function LogExplorer() {
             {integrity === "pass" ? <CheckCircle2 size={20} /> : <AlertTriangle size={20} />}
             <strong>
               {integrity === "pass"
-                ? "12,408 rows verified. Chain intact. Zero tampering detected."
-                : `Chain broken at log #${brokenId ?? 8812}. Row hash modified.`}
+                 ? `${integrityDetails?.rowsChecked ?? 0} rows checked. Chain intact.`
+                 : `Chain broken at log #${brokenId ?? "unknown"}. Backend reported a hash mismatch.`}
             </strong>
           </div>
           <span>{integrity === "pass" ? "Completed just now" : "Integrity review required immediately"}</span>
@@ -782,31 +944,39 @@ function LogExplorer() {
           </label>
           <label>
             <span>Outcome</span>
-            <button>
-              All outcomes
-              <ChevronDown size={14} />
-            </button>
+            <select value={outcomeFilter} onChange={(e) => setOutcomeFilter(e.target.value)}>
+              <option value="All">All outcomes</option>
+              <option value="ALLOWED">Allowed</option>
+              <option value="DENIED">Denied</option>
+              <option value="FAILED">Failed</option>
+            </select>
           </label>
           <label>
             <span>Action</span>
-            <button>
-              All actions
-              <ChevronDown size={14} />
-            </button>
+            <select value={actionFilter} onChange={(e) => setActionFilter(e.target.value)}>
+              <option value="All">All actions</option>
+              <option value="LOGIN">Login</option>
+              <option value="OPEN_CHART">Open chart</option>
+              <option value="OPEN_CLINICAL">Open clinical</option>
+              <option value="OPEN_NOTE">Open note</option>
+              <option value="BREAK_GLASS">Break-glass</option>
+              <option value="VIEW">Review action</option>
+            </select>
           </label>
           <label>
             <span>Time range</span>
-            <button>
-              Last 24 hours
-              <ChevronDown size={14} />
-            </button>
+            <select value={timeRange} onChange={(e) => setTimeRange(e.target.value)}>
+              <option value="24h">Last 24 hours</option>
+              <option value="7d">Last 7 days</option>
+               <option value="all">All retained events</option>
+            </select>
           </label>
         </div>
         <div className="log-summary">
           <span>
-            Showing <strong>1–{logs.length}</strong> of 12,408 events
-          </span>
-          <RuleChip>Live updates on</RuleChip>
+              Showing <strong>{filteredLogs.length}</strong> matching backend {filteredLogs.length === 1 ? "event" : "events"} · {timeRange === "all" ? "all retained data" : timeRange === "7d" ? "last 7 days" : "last 24 hours"}
+           </span>
+           <RuleChip>Backend API</RuleChip>
         </div>
         <div className="full-log-table">
           {integrity === "fail" && (
@@ -824,7 +994,13 @@ function LogExplorer() {
             <span>LOG ID</span>
             <span>SHA-256 CHAIN</span>
           </div>
-          {logs.map((log) => (
+           {isLoading ? (
+             <div className="baseline-note">Loading live audit events…</div>
+           ) : errorMessage ? (
+             <div className="baseline-note">No live events are displayed until the backend is reachable.</div>
+           ) : filteredLogs.length === 0 ? (
+             <div className="baseline-note">No backend events match the current filters.</div>
+           ) : filteredLogs.map((log) => (
             <div className="log-row" key={log.logId}>
               <span>{log.ts}</span>
               <span>{log.username} · {log.userRole}</span>
@@ -842,10 +1018,137 @@ function LogExplorer() {
             </div>
           ))}
         </div>
-        <div className="baseline-note">
-          <CheckCircle2 size={17} />
-          <strong>Suppressed: within on-ward baseline</strong>
-          <span>Nurse Priya opened 40 charts on Cardiology ward in 9 min. Baseline is 60.</span>
+      </section>
+    </main>
+  )
+}
+
+function Baselines({ onOpenAlerts }: { onOpenAlerts: () => void }) {
+  const [baselines, setBaselines] = useState<BaselineViewModel[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [errorMessage, setErrorMessage] = useState("")
+
+  useEffect(() => {
+    let cancelled = false
+    setIsLoading(true)
+    setErrorMessage("")
+    void medsentinelApi
+      .listBaselines()
+      .then((nextBaselines) => {
+        if (!cancelled) setBaselines(nextBaselines)
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) setErrorMessage(error instanceof Error ? error.message : "Unable to load live baselines.")
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  return (
+    <main className="page">
+      <section className="welcome">
+        <div>
+          <h2>Role & ward baselines</h2>
+          <p>Reference thresholds returned by the MedSentinel backend.</p>
+        </div>
+        <button className="btn btn-primary" onClick={onOpenAlerts}>Review alerts <ArrowLeft size={15} className="rotate-180" /></button>
+      </section>
+      {errorMessage && <div className="baseline-note" role="status">Live baselines are unavailable: {errorMessage}</div>}
+      <section className="kpi-grid">
+        {isLoading ? <div className="baseline-note">Loading live baselines…</div> : baselines.length === 0 ? <div className="baseline-note">No baselines were returned by the backend.</div> : baselines.map((baseline) => (
+          <div className="kpi-card" key={baseline.baselineId}>
+            <div className="kpi-top"><span>{baseline.scope} · Role #{baseline.roleId}</span><div className="kpi-icon"><SlidersHorizontal size={17} /></div></div>
+            <div className="kpi-value text-lg">{baseline.maxRecordsPer10Min} records / 10 min</div>
+            <div className="kpi-hint">Multiplier {baseline.multiplier}</div>
+          </div>
+        ))}
+      </section>
+      <section className="panel p-5">
+        <div className="panel-header !px-0 !pt-0">
+          <div><h3>How to read a baseline</h3><p>Baselines explain backend alert context; they are not clinical decisions.</p></div>
+        </div>
+        <div className="grid gap-3 p-4 sm:grid-cols-3">
+          <RuleChip>Role scope</RuleChip>
+          <RuleChip>Ward assignment</RuleChip>
+          <RuleChip>Shift timing</RuleChip>
+        </div>
+      </section>
+    </main>
+  )
+}
+
+function displayRole(role: string) {
+  return role === "DOCTOR"
+    ? "Doctor"
+    : role === "NURSE"
+      ? "Nurse"
+      : role === "BILLING"
+        ? "Billing"
+        : role === "RECEPTIONIST"
+          ? "Reception"
+          : role === "ADMIN"
+            ? "Administrator"
+            : "Security reviewer"
+}
+
+function UsersRoles({ onOpenClinical }: { onOpenClinical: () => void }) {
+  const [users, setUsers] = useState<AdminUserViewModel[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [errorMessage, setErrorMessage] = useState("")
+
+  useEffect(() => {
+    let cancelled = false
+    setIsLoading(true)
+    setErrorMessage("")
+    void medsentinelApi
+      .listUsers()
+      .then((nextUsers) => {
+        if (!cancelled) setUsers(nextUsers)
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) setErrorMessage(error instanceof Error ? error.message : "Unable to load live users.")
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  return (
+    <main className="page">
+      <section className="welcome">
+        <div>
+          <h2>Users & roles</h2>
+          <p>Directory entries and role scope returned by the MedSentinel backend.</p>
+        </div>
+        <button className="btn btn-primary" onClick={onOpenClinical}><UsersRound size={15} /> Open clinical access</button>
+      </section>
+      <section className="panel">
+        <div className="panel-header">
+          <div><h3>Identity directory</h3><p>{isLoading ? "Loading live identities…" : `${users.length} identities loaded from the backend`}</p></div>
+        </div>
+        <div className="full-log-table">
+          <div className="log-head"><span>NAME</span><span>USERNAME</span><span>ROLE</span><span>WARD</span><span>STATUS</span><span>SCOPE</span><span>USER ID</span><span>ACCESS</span></div>
+          {errorMessage ? <div className="baseline-note">Live users are unavailable: {errorMessage}</div> : isLoading ? <div className="baseline-note">Loading live users…</div> : users.length === 0 ? <div className="baseline-note">No users were returned by the backend.</div> : users.map((user) => (
+            <div className="log-row" key={user.userId}>
+              <span>{user.fullName}</span>
+              <span>{user.username}</span>
+              <span>{displayRole(user.role)}</span>
+              <span>{user.wardName || "Organization-wide"}</span>
+              <span className="outcome"><i />{user.status}</span>
+              <span>{user.role === "BILLING" ? "Billing only" : user.role === "REVIEWER" ? "SOC review" : "Role scoped"}</span>
+              <span>#{user.userId}</span>
+               <span><button className="btn btn-ghost" onClick={onOpenClinical}>Open clinical access</button></span>
+            </div>
+          ))}
         </div>
       </section>
     </main>
@@ -854,19 +1157,31 @@ function LogExplorer() {
 
 function Simulator({ goDashboard }: { goDashboard: () => void }) {
   const [runningMsg, setRunningMsg] = useState<string | null>(null)
+  const [runningScenario, setRunningScenario] = useState<string | null>(null)
+  const [errorMessage, setErrorMessage] = useState("")
   const scenarios = [
-    ["Normal nurse shift", "Routine on-ward access", "Expect: no alert", "ok"],
-    ["Busy clinician burst", "40 charts within ward baseline", "Expect: no alert", "ok"],
-    ["Brute-force login", "Repeated failures then success", "Expect: R1", "alert"],
-    ["Billing clerk bulk pull", "38 clinical records in 7 min", "Expect: R2 + R3", "alert"],
-    ["Receptionist reads clinical", "Attempted restricted note", "Expect: R3", "alert"],
-    ["Break-glass use", "Off-ward emergency access", "Expect: review", "review"],
-    ["Tamper log row", "Modify chain-protected event", "Expect: integrity fail", "danger"],
+    { name: "Normal nurse shift", description: "Routine on-ward access", expectation: "Expect: no alert", tone: "ok", slug: "normal-nurse" },
+    { name: "Busy clinician burst", description: "40 charts within ward baseline", expectation: "Expect: no alert", tone: "ok", slug: "busy-clinician" },
+    { name: "Brute-force login", description: "Repeated failures then success", expectation: "Expect: R1", tone: "alert", slug: "brute-force" },
+    { name: "Billing clerk bulk pull", description: "38 clinical records in 7 min", expectation: "Expect: R2 + R3", tone: "alert", slug: "billing-bulk" },
+    { name: "Receptionist reads clinical", description: "Attempted restricted note", expectation: "Expect: R3", tone: "alert", slug: "receptionist-clinical" },
+    { name: "Break-glass use", description: "Off-ward emergency access", expectation: "Expect: review", tone: "review", slug: "break-glass" },
+    { name: "Tamper log row", description: "Modify chain-protected event", expectation: "Expect: integrity fail", tone: "danger", slug: "tamper-log" },
+    { name: "Seed audit logs", description: "Generate retained backend log rows", expectation: "Expect: new events", tone: "review", slug: "seed" },
   ]
 
-  const handleRun = async (scenarioName: string) => {
-    const res = medEngine.runScenario(scenarioName)
-    setRunningMsg(res.message)
+  const handleRun = async (scenario: (typeof scenarios)[number]) => {
+    setRunningScenario(scenario.slug)
+    setRunningMsg(null)
+    setErrorMessage("")
+    try {
+      const result = await medsentinelApi.runSimulator(scenario.slug)
+      setRunningMsg(result.result)
+    } catch (error: unknown) {
+      setErrorMessage(error instanceof Error ? error.message : "Unable to run the backend scenario.")
+    } finally {
+      setRunningScenario(null)
+    }
   }
 
   return (
@@ -874,18 +1189,19 @@ function Simulator({ goDashboard }: { goDashboard: () => void }) {
       <section className="welcome">
         <div>
           <h2>Scenario simulator</h2>
-          <p>Generate safe demo events to test detection rules and reviewer workflows.</p>
+          <p>Generate backend events to test detection rules and reviewer workflows.</p>
         </div>
         <span className="demo-badge">
           <FlaskConical size={15} />
           DEMO ENVIRONMENT
         </span>
       </section>
+      {errorMessage && <div className="baseline-note" role="status">Scenario unavailable: {errorMessage}</div>}
       {runningMsg && (
         <div className="scenario-result">
           <CheckCircle2 size={20} />
           <div>
-            <strong>Scenario executed in engine</strong>
+            <strong>Scenario executed by backend</strong>
             <span>{runningMsg}</span>
           </div>
           <button className="btn btn-primary" onClick={goDashboard}>
@@ -894,18 +1210,18 @@ function Simulator({ goDashboard }: { goDashboard: () => void }) {
         </div>
       )}
       <div className="scenario-grid">
-        {scenarios.map((s, i) => (
-          <button className="scenario-card" key={s[0]} onClick={() => handleRun(s[0])}>
-            <span className={`scenario-icon tone-${s[3]}`}>
-              {i === 6 ? <ShieldCheck size={20} /> : i === 2 ? <LockKeyhole size={20} /> : <Activity size={20} />}
-            </span>
-            <div>
-              <h3>{s[0]}</h3>
-              <p>{s[1]}</p>
-              <b className={`expect ${s[3]}`}>{s[2]}</b>
-            </div>
-            <span className="run-arrow">Run →</span>
-          </button>
+         {scenarios.map((scenario) => (
+           <button className="scenario-card" key={scenario.slug} onClick={() => void handleRun(scenario)} disabled={runningScenario !== null}>
+             <span className={`scenario-icon tone-${scenario.tone}`}>
+               {scenario.slug === "tamper-log" ? <ShieldCheck size={20} /> : scenario.slug === "brute-force" ? <LockKeyhole size={20} /> : <Activity size={20} />}
+             </span>
+             <div>
+               <h3>{scenario.name}</h3>
+               <p>{scenario.description}</p>
+               <b className={`expect ${scenario.tone}`}>{scenario.expectation}</b>
+             </div>
+             <span className="run-arrow">{runningScenario === scenario.slug ? "Running…" : "Run →"}</span>
+           </button>
         ))}
       </div>
     </main>
@@ -917,21 +1233,20 @@ export function MedSentinelDashboard({
   initialView = "dashboard",
   initialRole = "Security Reviewer",
   initialUser = "Marcus Chen",
+  initialUsername = "rev.meera",
+  initialPermissions = [],
 }: MedSentinelDashboardProps) {
-  const [role, setRole] = useState(
-    initialRole.toLowerCase().includes("physician") || initialRole.toLowerCase().includes("nurse")
-      ? "Clinician"
-      : "Security reviewer"
-  )
+  const capabilities = getAccessCapabilities(initialRole, initialPermissions)
+  const [role, setRole] = useState(capabilities.canUseSecurityWorkspace ? "Security reviewer" : "Clinician")
   const [view, setView] = useState<View>(initialView)
   const [activeAlertId, setActiveAlertId] = useState("A-101")
   const [menuOpen, setMenuOpen] = useState(false)
 
-  // Switch between Clinician Workspace and Reviewer Workspace
-  if (role !== "Security reviewer") {
+  // Only expose workspaces that the authenticated backend session can use.
+  if (role !== "Security reviewer" && capabilities.canUseClinicalWorkspace) {
     return (
       <div className="relative">
-        <button
+        {capabilities.canUseSecurityWorkspace && <button
           className="reviewer-role-switch"
           onClick={() => setRole("Security reviewer")}
           title="Switch to Security Reviewer Console"
@@ -939,14 +1254,19 @@ export function MedSentinelDashboard({
           <ShieldPlus size={16} />
           <span>Security Reviewer Console</span>
           <ChevronDown size={14} />
-        </button>
+        </button>}
         <Clinical
           key={role}
           patientPortal={role === "Patient"}
+          userName={initialUser}
+          userRole={initialRole}
+          username={initialUsername}
+          onLogout={onLogout}
+          capabilities={capabilities}
           switchRole={(r) => {
-            if (r === "Security reviewer") {
+            if (r === "Security reviewer" && capabilities.canUseSecurityWorkspace) {
               setRole("Security reviewer")
-            } else {
+            } else if ((r === "Clinician" || r === "Patient") && capabilities.canUseClinicalWorkspace) {
               setRole(r)
             }
           }}
@@ -955,12 +1275,12 @@ export function MedSentinelDashboard({
     )
   }
 
-  const reviewer = view !== "clinician"
+  const reviewer = role === "Security reviewer"
 
   return (
     <div className={reviewer ? "app-shell" : "clinical-shell"}>
       {/* Floating switcher to jump directly into Clinician / Patient workspace */}
-      <button
+      {capabilities.canUseClinicalWorkspace && <button
         className="reviewer-role-switch"
         onClick={() => setRole("Clinician")}
         title="Open Clinician EHR Workspace"
@@ -968,16 +1288,23 @@ export function MedSentinelDashboard({
         <HeartPulse size={15} />
         <span>Clinical Workspace</span>
         <ChevronDown size={14} />
-      </button>
+      </button>}
 
       {reviewer && (
         <Sidebar
           view={view}
-          setView={setView}
+          setView={(nextView) => {
+            if (nextView === "clinician") {
+              setRole("Clinician")
+              return
+            }
+            setView(nextView)
+          }}
           open={menuOpen}
-          close={() => setMenuOpen(false)}
-          onLogout={onLogout}
-        />
+           close={() => setMenuOpen(false)}
+           onLogout={onLogout}
+           capabilities={capabilities}
+         />
       )}
 
       <div className={reviewer ? "content-shell" : ""}>
@@ -990,13 +1317,19 @@ export function MedSentinelDashboard({
                   ? "Alert investigation"
                   : view === "logs"
                     ? "Audit trail"
-                    : "Demo controls"
+                    : view === "baselines"
+                      ? "Baselines"
+                      : view === "users"
+                        ? "Users & roles"
+                        : "Demo controls"
             }
             eyebrow="ST. ANNE’S HOSPITAL"
             userName={initialUser}
             userRole={initialRole}
             onMenu={() => setMenuOpen(true)}
+            onOpenAlerts={() => setView("alert")}
             onLogout={onLogout}
+            canViewAlerts={capabilities.canViewAlerts}
           />
         )}
 
@@ -1006,11 +1339,15 @@ export function MedSentinelDashboard({
               if (id) setActiveAlertId(id)
               setView("alert")
             }}
+            onOpenAlerts={() => setView("alert")}
+            userName={initialUser}
           />
         )}
-        {view === "alert" && <AlertDetail alertId={activeAlertId} back={() => setView("dashboard")} />}
-        {view === "logs" && <LogExplorer />}
+        {view === "alert" && <AlertDetail key={activeAlertId} alertId={activeAlertId} back={() => setView("dashboard")} canReviewActions={capabilities.canReviewAlerts} />}
+        {view === "logs" && <LogExplorer canAdmin={capabilities.canAdmin} />}
         {view === "simulator" && <Simulator goDashboard={() => setView("dashboard")} />}
+        {view === "baselines" && <Baselines onOpenAlerts={() => setView("alert")} />}
+        {view === "users" && <UsersRoles onOpenClinical={() => setRole("Clinician")} />}
       </div>
     </div>
   )

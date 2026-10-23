@@ -1,22 +1,18 @@
 package com.medsentinel.patient;
 
-import jakarta.persistence.*;
-
-@Entity
-@Table(name = "wards")
 public class Ward {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "ward_id")
     private Long wardId;
-
-    @Column(name = "name", nullable = false, unique = true)
     private String name;
 
     public Ward() {}
 
     public Ward(String name) {
+        this.name = name;
+    }
+
+    public Ward(Long wardId, String name) {
+        this.wardId = wardId;
         this.name = name;
     }
 

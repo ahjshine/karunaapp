@@ -5,16 +5,18 @@ import com.medsentinel.patient.CareAssignmentRepository;
 import com.medsentinel.patient.Patient;
 import com.medsentinel.patient.PatientRepository;
 import com.medsentinel.patient.PatientRecord;
-import org.springframework.stereotype.Service;
 
 /**
  * Central RBAC enforcement: checks whether a user can access a given resource.
  */
-@Service
 public class AccessGuard {
 
     private final CareAssignmentRepository careAssignmentRepo;
     private final PatientRepository patientRepo;
+
+    public AccessGuard() {
+        this(new CareAssignmentRepository(), new PatientRepository());
+    }
 
     public AccessGuard(CareAssignmentRepository careAssignmentRepo,
                        PatientRepository patientRepo) {
@@ -28,6 +30,13 @@ public class AccessGuard {
      */
     public String checkAccess(AppUserDetails user, PatientRecord.RecordType recordType,
                                Long patientId) {
+        if (user == null) {
+            return "Authenticated principal required";
+        }
+        if (recordType == null) {
+            return "Record type is required";
+        }
+
         // Map record type to required permission
         String requiredPerm = switch (recordType) {
             case CLINICAL -> "VIEW_CLINICAL";
@@ -43,7 +52,8 @@ public class AccessGuard {
         if ("NURSE".equals(user.getRoleName()) && recordType == PatientRecord.RecordType.CLINICAL) {
             if (patientId != null && user.getWardId() != null) {
                 Patient patient = patientRepo.findById(patientId).orElse(null);
-                if (patient != null && !patient.getWardId().equals(user.getWardId())) {
+                if (patient != null && patient.getWardId() != null
+                    && !patient.getWardId().equals(user.getWardId())) {
                     // Check care assignment as fallback
                     if (!careAssignmentRepo.existsByUserIdAndPatientId(user.getUserId(), patientId)) {
                         return "Nurse not assigned to patient's ward and no care assignment";

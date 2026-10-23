@@ -1,23 +1,21 @@
 package com.medsentinel.alert;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Optional;
 
 /**
  * Creates, deduplicates, and manages alerts.
  */
-@Service
 public class AlertService {
 
-    private static final Logger log = LoggerFactory.getLogger(AlertService.class);
     private final AlertRepository alertRepo;
     private final AlertEvidenceRepository evidenceRepo;
+
+    public AlertService() {
+        this(new AlertRepository(), new AlertEvidenceRepository());
+    }
 
     public AlertService(AlertRepository alertRepo, AlertEvidenceRepository evidenceRepo) {
         this.alertRepo = alertRepo;
@@ -27,17 +25,13 @@ public class AlertService {
     /**
      * Create a new alert or merge into an existing one (dedup by user + rules + window).
      */
-    @Transactional
     public Alert createOrMergeAlert(Long userId, String ruleCodes, int score,
                                      String severity, String explanation,
                                      List<Long> evidenceLogIds) {
         if (userId == null) {
-            // Can't dedup without a userId; create a new alert with a placeholder
             return createNewAlert(null, ruleCodes, score, severity, explanation, evidenceLogIds);
         }
 
-        // Merge all rule hits for a user during one ten-minute correlation window.
-        // This lets a clerk's R3 denial and subsequent R2 bulk pull become one High alert.
         LocalDateTime windowStart = LocalDateTime.now().minusMinutes(10);
         List<Alert> activeAlerts = alertRepo.findOpenForUserSince(userId, windowStart);
 
@@ -58,11 +52,16 @@ public class AlertService {
             alert.setLastSeen(LocalDateTime.now());
             alert.setEventCount(alert.getEventCount() + 1);
             alert.setExplanation(alert.getExplanation() + "; " + explanation);
+
+            if (evidenceLogIds != null) {
+                LinkedHashSet<Long> evidence = new LinkedHashSet<>();
+                if (alert.getEvidenceLogIds() != null) evidence.addAll(alert.getEvidenceLogIds());
+                evidence.addAll(evidenceLogIds);
+                alert.setEvidenceLogIds(new ArrayList<>(evidence));
+            }
+
             alertRepo.save(alert);
             addEvidence(alert.getAlertId(), evidenceLogIds);
-
-            log.info("Merged into existing alert A-{}: rules={}, score={}, count={}",
-                alert.getAlertId(), mergedRules, mergedScore, alert.getEventCount());
             return alert;
         }
 
@@ -78,11 +77,12 @@ public class AlertService {
         alert.setScore(score);
         alert.setSeverity(Alert.Severity.valueOf(severity));
         alert.setExplanation(explanation);
+        if (evidenceLogIds != null) {
+            alert.setEvidenceLogIds(new ArrayList<>(evidenceLogIds));
+        }
         alert = alertRepo.save(alert);
 
         addEvidence(alert.getAlertId(), evidenceLogIds);
-
-        log.info("Created new alert A-{}: rules={}, severity={}", alert.getAlertId(), ruleCodes, severity);
         return alert;
     }
 
@@ -97,6 +97,7 @@ public class AlertService {
     }
 
     private void addEvidence(Long alertId, List<Long> logIds) {
+        if (logIds == null) return;
         for (Long logId : logIds) {
             AlertEvidenceId id = new AlertEvidenceId(alertId, logId);
             if (!evidenceRepo.existsById(id)) {
@@ -105,10 +106,6 @@ public class AlertService {
         }
     }
 
-    /**
-     * Update alert status (reviewer action).
-     */
-    @Transactional
     public Alert updateStatus(Long alertId, Alert.AlertStatus newStatus, String note) {
         Alert alert = alertRepo.findById(alertId)
             .orElseThrow(() -> new RuntimeException("Alert not found: " + alertId));

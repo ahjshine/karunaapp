@@ -1,4 +1,5 @@
-import { Shield, Lock } from "lucide-react"
+import { useState } from "react"
+import { ChevronDown, Shield, Lock } from "lucide-react"
 
 interface FooterProps {
   onOpenLogin: () => void
@@ -7,9 +8,15 @@ interface FooterProps {
 }
 
 export function Footer({ onOpenLogin, onOpenDemo, onOpenDashboard }: FooterProps) {
+  const [openLegalPanel, setOpenLegalPanel] = useState<"privacy" | "terms" | null>(null)
+
   const scrollTo = (id: string) => {
     const el = document.getElementById(id)
     if (el) el.scrollIntoView({ behavior: "smooth" })
+  }
+
+  const toggleLegalPanel = (panel: "privacy" | "terms") => {
+    setOpenLegalPanel((currentPanel) => (currentPanel === panel ? null : panel))
   }
 
   return (
@@ -39,9 +46,9 @@ export function Footer({ onOpenLogin, onOpenDemo, onOpenDashboard }: FooterProps
             </p>
 
             <div className="flex flex-wrap items-center gap-3 pt-2 text-xs font-mono text-[#536b68]">
-              <span className="rounded bg-white/60 px-2 py-0.5">HIPAA Compliant</span>
-              <span className="rounded bg-white/60 px-2 py-0.5">SOC-2 Type II</span>
-              <span className="rounded bg-white/60 px-2 py-0.5">HITECH Aligned</span>
+              <span className="rounded bg-white/60 px-2 py-0.5">Demo data only</span>
+              <span className="rounded bg-white/60 px-2 py-0.5">Audit-ready export</span>
+              <span className="rounded bg-white/60 px-2 py-0.5">Role-aware controls</span>
             </div>
           </div>
 
@@ -100,24 +107,71 @@ export function Footer({ onOpenLogin, onOpenDemo, onOpenDashboard }: FooterProps
                 </button>
               </li>
               <li>
-                <a
-                  href="#contact"
-                  onClick={(e) => {
-                    e.preventDefault()
-                    onOpenDemo()
-                  }}
+                <button
+                  type="button"
+                  onClick={onOpenDemo}
                   className="transition-colors hover:text-[#0b1220]"
                 >
                   Institutional Contact
-                </a>
+                </button>
               </li>
               <li>
-                <span className="text-slate-500 cursor-default">Privacy Policy</span>
+                <button
+                  type="button"
+                  aria-controls="footer-privacy-policy"
+                  aria-expanded={openLegalPanel === "privacy"}
+                  onClick={() => toggleLegalPanel("privacy")}
+                  className="flex items-center gap-1.5 transition-colors hover:text-[#0b1220]"
+                >
+                  <span>Privacy Policy</span>
+                  <ChevronDown
+                    className={`h-3.5 w-3.5 transition-transform ${openLegalPanel === "privacy" ? "rotate-180" : ""}`}
+                  />
+                </button>
               </li>
               <li>
-                <span className="text-slate-500 cursor-default">Terms of Use</span>
+                <button
+                  type="button"
+                  aria-controls="footer-terms-of-use"
+                  aria-expanded={openLegalPanel === "terms"}
+                  onClick={() => toggleLegalPanel("terms")}
+                  className="flex items-center gap-1.5 transition-colors hover:text-[#0b1220]"
+                >
+                  <span>Terms of Use</span>
+                  <ChevronDown
+                    className={`h-3.5 w-3.5 transition-transform ${openLegalPanel === "terms" ? "rotate-180" : ""}`}
+                  />
+                </button>
               </li>
             </ul>
+
+            {openLegalPanel === "privacy" && (
+              <div
+                id="footer-privacy-policy"
+                role="region"
+                aria-label="Privacy Policy"
+                className="mt-4 rounded-lg border border-[#b8cbc7] bg-white/50 p-3 text-xs leading-relaxed text-[#4e6562]"
+              >
+                <p>
+                  This landing-page preview keeps demo details in local browser state. It does not send email, create a
+                  calendar event, or transmit your information to a backend service.
+                </p>
+              </div>
+            )}
+
+            {openLegalPanel === "terms" && (
+              <div
+                id="footer-terms-of-use"
+                role="region"
+                aria-label="Terms of Use"
+                className="mt-4 rounded-lg border border-[#b8cbc7] bg-white/50 p-3 text-xs leading-relaxed text-[#4e6562]"
+              >
+                <p>
+                  This landing-page preview is for demonstration purposes. Dashboard activity, alerts, and booking
+                  availability shown here are illustrative and are not clinical advice or a live security decision.
+                </p>
+              </div>
+            )}
           </div>
         </div>
 

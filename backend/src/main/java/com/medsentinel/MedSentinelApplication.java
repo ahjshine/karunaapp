@@ -1,14 +1,8 @@
 package com.medsentinel;
 
-import org.springframework.boot.SpringApplication;
-import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.scheduling.annotation.EnableScheduling;
-
-@SpringBootApplication
-@EnableScheduling
 public class MedSentinelApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(MedSentinelApplication.class, args);
+        MedSentinelServer.main(args);
     }
 }

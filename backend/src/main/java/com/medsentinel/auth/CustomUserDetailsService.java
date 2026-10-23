@@ -1,18 +1,11 @@
 package com.medsentinel.auth;
 
 import com.medsentinel.rbac.Permission;
-import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
-import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
 
-@Service
-public class CustomUserDetailsService implements UserDetailsService {
+public class CustomUserDetailsService {
 
     private final UserRepository userRepository;
 
@@ -20,29 +13,29 @@ public class CustomUserDetailsService implements UserDetailsService {
         this.userRepository = userRepository;
     }
 
-    @Override
-    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+    public AppUserDetails loadUserByUsername(String username) {
         User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
+                .orElseThrow(() -> new RuntimeException("User not found: " + username));
 
         if (user.getStatus() == User.UserStatus.DISABLED) {
-            throw new UsernameNotFoundException("User disabled: " + username);
+            throw new RuntimeException("User disabled: " + username);
         }
 
-        List<GrantedAuthority> authorities = new ArrayList<>();
-        // Add role as ROLE_<name> for Spring Security hasRole() checks
-        authorities.add(new SimpleGrantedAuthority("ROLE_" + user.getRole().getName()));
-
-        // Add individual permissions
-        for (Permission perm : user.getRole().getPermissions()) {
-            authorities.add(new SimpleGrantedAuthority(perm.getCode()));
+        Set<String> authorities = new HashSet<>();
+        if (user.getRole() != null) {
+            authorities.add("ROLE_" + user.getRole().getName());
+            if (user.getRole().getPermissions() != null) {
+                for (Permission perm : user.getRole().getPermissions()) {
+                    authorities.add(perm.getCode());
+                }
+            }
         }
 
         return new AppUserDetails(
             user.getUserId(),
             user.getUsername(),
             user.getPwHash(),
-            user.getRole().getName(),
+            user.getRole() != null ? user.getRole().getName() : "USER",
             user.getWardId(),
             authorities
         );

@@ -1,15 +1,14 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
-import { ArrowRight, Menu, Shield, Lock, LayoutDashboard } from "lucide-react"
+import { ArrowRight, Menu, Shield, Lock } from "lucide-react"
 
 interface NavbarProps {
   onOpenDemo: () => void
   onOpenLogin: () => void
-  onOpenDashboard: () => void
 }
 
-export function Navbar({ onOpenDemo, onOpenLogin, onOpenDashboard }: NavbarProps) {
+export function Navbar({ onOpenDemo, onOpenLogin }: NavbarProps) {
   const [isOpen, setIsOpen] = useState(false)
 
   const scrollTo = (id: string) => {
@@ -24,28 +23,28 @@ export function Navbar({ onOpenDemo, onOpenLogin, onOpenDashboard }: NavbarProps
     <header className="sticky top-0 z-50 w-full border-b border-[#0b1220]/10 bg-[#c9d8d5]/90 backdrop-blur-md transition-all">
       <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         {/* Logo */}
-        <a
-          href="#"
-          onClick={(e) => {
-            e.preventDefault()
+        <button
+          type="button"
+          aria-label="Return to the top of the page"
+          onClick={() => {
             window.scrollTo({ top: 0, behavior: "smooth" })
           }}
-          className="group flex items-center gap-3 transition-opacity hover:opacity-90"
+          className="group flex items-center gap-3 bg-transparent p-0 text-left transition-opacity hover:opacity-90"
         >
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#0b1220] shadow-sm transition-transform group-hover:scale-105">
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#0b1220] shadow-sm transition-transform group-hover:scale-105">
             <Shield className="h-5 w-5 text-[#14b8a6]" />
-          </div>
-          <div className="flex items-center gap-3">
+          </span>
+          <span className="flex items-center gap-3">
             <span className="text-2xl font-bold tracking-tight text-[#0b1220]">
               Karuna<span className="text-[#14b8a6]">.</span>
             </span>
-            <div className="hidden h-7 w-px bg-[#a9bfbb] sm:block" />
-            <div className="hidden flex-col text-[10px] font-semibold tracking-wider text-[#496159] uppercase sm:flex">
+            <span className="hidden h-7 w-px bg-[#a9bfbb] sm:block" />
+            <span className="hidden flex-col text-[10px] font-semibold tracking-wider text-[#496159] uppercase sm:flex">
               <span>Clinical Access</span>
               <span>Intelligence</span>
-            </div>
-          </div>
-        </a>
+            </span>
+          </span>
+        </button>
 
         {/* Desktop Navigation */}
         <nav className="hidden items-center gap-8 md:flex">
@@ -77,24 +76,6 @@ export function Navbar({ onOpenDemo, onOpenLogin, onOpenDashboard }: NavbarProps
 
         {/* Right CTA */}
         <div className="hidden items-center gap-3 md:flex">
-          <div className="hidden lg:flex items-center gap-1.5 rounded-full border border-teal-700/20 bg-teal-500/10 px-2.5 py-1 text-[10px] font-mono font-medium text-[#0d514f]">
-            <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-teal-400 opacity-75"></span>
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-teal-500"></span>
-            </span>
-            SECURITY ENGINE ACTIVE
-          </div>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onOpenDashboard}
-            className="gap-1.5 border-teal-700/30 bg-teal-500/10 text-xs font-semibold text-[#0d514f] hover:bg-teal-500 hover:text-black"
-          >
-            <LayoutDashboard className="h-3.5 w-3.5 text-[#14b8a6]" />
-            <span>Dashboard</span>
-          </Button>
-
           <Button
             variant="ghost"
             size="sm"
@@ -116,14 +97,6 @@ export function Navbar({ onOpenDemo, onOpenLogin, onOpenDashboard }: NavbarProps
 
         {/* Mobile Menu */}
         <div className="flex items-center gap-2 md:hidden">
-          <Button
-            onClick={onOpenDashboard}
-            size="sm"
-            variant="outline"
-            className="border-teal-700/30 bg-teal-500/10 text-xs font-semibold text-[#0d514f]"
-          >
-            Dashboard
-          </Button>
           <Button
             onClick={onOpenLogin}
             size="sm"
@@ -184,16 +157,6 @@ export function Navbar({ onOpenDemo, onOpenLogin, onOpenDashboard }: NavbarProps
                 </button>
 
                 <div className="mt-6 flex flex-col gap-3 border-t border-gray-200 pt-6">
-                  <Button
-                    onClick={() => {
-                      setIsOpen(false)
-                      onOpenDashboard()
-                    }}
-                    className="w-full gap-2 bg-[#0d514f] text-white font-semibold"
-                  >
-                    <LayoutDashboard className="h-4 w-4 text-[#5eead4]" />
-                    <span>Open Live Dashboard</span>
-                  </Button>
                   <Button
                     variant="outline"
                     onClick={() => {

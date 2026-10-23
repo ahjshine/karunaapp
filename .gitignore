@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# Java backend build output and vendored dependency cache
+backend/target/
+backend/lib/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

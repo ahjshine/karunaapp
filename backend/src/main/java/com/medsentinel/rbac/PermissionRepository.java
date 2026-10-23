@@ -1,8 +1,16 @@
 package com.medsentinel.rbac;
 
-import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.Optional;
 
-public interface PermissionRepository extends JpaRepository<Permission, Long> {
-    Optional<Permission> findByCode(String code);
+public class PermissionRepository {
+
+    public Optional<Permission> findByCode(String code) {
+        return Optional.of(new Permission(code));
+    }
+
+    public Permission save(Permission p) {
+        return p;
+    }
+
+    public void deleteAll() {}
 }

@@ -1,18 +1,8 @@
 package com.medsentinel.patient;
 
-import jakarta.persistence.*;
-
-@Entity
-@Table(name = "care_assignments")
-@IdClass(CareAssignmentId.class)
 public class CareAssignment {
 
-    @Id
-    @Column(name = "user_id")
     private Long userId;
-
-    @Id
-    @Column(name = "patient_id")
     private Long patientId;
 
     public CareAssignment() {}

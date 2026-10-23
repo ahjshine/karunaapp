@@ -15,6 +15,11 @@ public class AlertEvidenceId implements Serializable {
         this.logId = logId;
     }
 
+    public Long getAlertId() { return alertId; }
+    public void setAlertId(Long alertId) { this.alertId = alertId; }
+    public Long getLogId() { return logId; }
+    public void setLogId(Long logId) { this.logId = logId; }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;

@@ -7,7 +7,6 @@ import com.medsentinel.patient.PatientRecord;
 import com.medsentinel.patient.PatientRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 
 import java.util.List;
 import java.util.Optional;
@@ -32,10 +31,10 @@ class AccessGuardTest {
     void doctor_HasClinicalAndExport_NoBilling() {
         AppUserDetails doctor = new AppUserDetails(1L, "dr.asha", "pass", "DOCTOR", 1L,
             List.of(
-                new SimpleGrantedAuthority("ROLE_DOCTOR"),
-                new SimpleGrantedAuthority("VIEW_DEMOGRAPHICS"),
-                new SimpleGrantedAuthority("VIEW_CLINICAL"),
-                new SimpleGrantedAuthority("EXPORT")
+                "ROLE_DOCTOR",
+                "VIEW_DEMOGRAPHICS",
+                "VIEW_CLINICAL",
+                "EXPORT"
             ));
 
         assertNull(guard.checkAccess(doctor, PatientRecord.RecordType.CLINICAL, 1L));
@@ -49,12 +48,23 @@ class AccessGuardTest {
     }
 
     @Test
+    void explicitPermissionCodesControlEachRecordType() {
+        AppUserDetails clinicalReviewer = new AppUserDetails(5L, "clinical.reviewer", "pass", "REVIEWER", null,
+            List.of("VIEW_CLINICAL"));
+
+        assertNull(guard.checkAccess(clinicalReviewer, PatientRecord.RecordType.CLINICAL, 1L));
+        assertNotNull(guard.checkAccess(clinicalReviewer, PatientRecord.RecordType.BILLING, 1L));
+        assertNotNull(guard.checkAccess(clinicalReviewer, PatientRecord.RecordType.DEMOGRAPHIC, 1L));
+        assertNotNull(guard.checkExport(clinicalReviewer));
+    }
+
+    @Test
     void nurse_OwnWardClinicalAllowed_OffWardClinicalDenied() {
         AppUserDetails nurse = new AppUserDetails(2L, "nurse.priya", "pass", "NURSE", 1L,
             List.of(
-                new SimpleGrantedAuthority("ROLE_NURSE"),
-                new SimpleGrantedAuthority("VIEW_DEMOGRAPHICS"),
-                new SimpleGrantedAuthority("VIEW_CLINICAL")
+                "ROLE_NURSE",
+                "VIEW_DEMOGRAPHICS",
+                "VIEW_CLINICAL"
             ));
 
         Patient onWardPatient = new Patient();
@@ -85,9 +95,9 @@ class AccessGuardTest {
     void billingClerk_BillingAllowed_ClinicalDenied() {
         AppUserDetails clerk = new AppUserDetails(3L, "clerk.ravi", "pass", "BILLING", null,
             List.of(
-                new SimpleGrantedAuthority("ROLE_BILLING"),
-                new SimpleGrantedAuthority("VIEW_DEMOGRAPHICS"),
-                new SimpleGrantedAuthority("VIEW_BILLING")
+                "ROLE_BILLING",
+                "VIEW_DEMOGRAPHICS",
+                "VIEW_BILLING"
             ));
 
         assertNull(guard.checkAccess(clerk, PatientRecord.RecordType.BILLING, 1L));
@@ -102,8 +112,8 @@ class AccessGuardTest {
     void receptionist_DemographicsAllowed_ClinicalDenied() {
         AppUserDetails rec = new AppUserDetails(4L, "rec.neha", "pass", "RECEPTIONIST", null,
             List.of(
-                new SimpleGrantedAuthority("ROLE_RECEPTIONIST"),
-                new SimpleGrantedAuthority("VIEW_DEMOGRAPHICS")
+                "ROLE_RECEPTIONIST",
+                "VIEW_DEMOGRAPHICS"
             ));
 
         assertNull(guard.checkAccess(rec, PatientRecord.RecordType.DEMOGRAPHIC, 1L));

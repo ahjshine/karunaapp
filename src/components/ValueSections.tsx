@@ -67,7 +67,7 @@ export function ValueSections({ onOpenDemo, onInspectAlert }: ValueSectionsProps
                   Expected Activity Range
                 </span>
                 <Badge variant="outline" className="border-teal-500/30 font-mono text-[10px] text-[#14b8a6]">
-                  Live Telemetry
+                  Sample Telemetry
                 </Badge>
               </div>
 
@@ -102,7 +102,7 @@ export function ValueSections({ onOpenDemo, onInspectAlert }: ValueSectionsProps
                   <span className="h-2 w-2 rounded-full bg-[#14b8a6]" />
                   <span className="text-[#91a5a0]">Within role and ward baseline</span>
                 </div>
-                <span className="font-mono text-[10px] text-teal-400">99.4% compliant</span>
+                <span className="font-mono text-[10px] text-teal-400">Illustrative sample</span>
               </div>
             </div>
           </div>
@@ -122,34 +122,38 @@ export function ValueSections({ onOpenDemo, onInspectAlert }: ValueSectionsProps
 
               <div className="mt-4 space-y-3">
                 {/* Alert Item A-101 */}
-                <div
+                <button
+                  type="button"
+                  aria-label="Inspect alert A-101: Billing clerk opened 38 clinical records in 7 minutes"
                   onClick={() => onInspectAlert?.("A-101")}
-                  className="cursor-pointer rounded-xl border border-rose-500/30 bg-rose-950/20 p-4 transition hover:border-rose-500/60"
+                  className="w-full rounded-xl border border-rose-500/30 bg-rose-950/20 p-4 text-left transition hover:border-rose-500/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#14b8a6]/60"
                 >
-                  <div className="flex items-center justify-between">
+                  <span className="flex items-center justify-between">
                     <Badge className="border-rose-500/30 bg-rose-500/15 text-[10px] text-rose-300">High</Badge>
                     <span className="font-mono text-[10px] text-slate-400">2m ago</span>
-                  </div>
-                  <h4 className="mt-2 text-xs font-bold text-white">
+                  </span>
+                  <span className="mt-2 block text-xs font-bold text-white">
                     Billing clerk opened 38 clinical records in 7 minutes.
-                  </h4>
-                  <p className="mt-0.5 text-[11px] text-[#73849b]">Role baseline is 0.</p>
-                </div>
+                  </span>
+                  <span className="mt-0.5 block text-[11px] text-[#73849b]">Role baseline is 0.</span>
+                </button>
 
                 {/* Alert Item A-102 */}
-                <div
+                <button
+                  type="button"
+                  aria-label="Inspect alert A-102: 5 failed logins, followed by a successful login"
                   onClick={() => onInspectAlert?.("A-102")}
-                  className="cursor-pointer rounded-xl border border-amber-500/30 bg-amber-950/20 p-4 transition hover:border-amber-500/60"
+                  className="w-full rounded-xl border border-amber-500/30 bg-amber-950/20 p-4 text-left transition hover:border-amber-500/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#14b8a6]/60"
                 >
-                  <div className="flex items-center justify-between">
+                  <span className="flex items-center justify-between">
                     <Badge className="border-amber-500/30 bg-amber-500/15 text-[10px] text-amber-300">Medium</Badge>
                     <span className="font-mono text-[10px] text-slate-400">18m ago</span>
-                  </div>
-                  <h4 className="mt-2 text-xs font-bold text-white">
+                  </span>
+                  <span className="mt-2 block text-xs font-bold text-white">
                     5 failed logins, followed by a successful login.
-                  </h4>
-                  <p className="mt-0.5 text-[11px] text-[#73849b]">Source 10.2.4.77</p>
-                </div>
+                  </span>
+                  <span className="mt-0.5 block text-[11px] text-[#73849b]">Source 10.2.4.77</span>
+                </button>
 
                 {/* Role Baseline Comparison Pill */}
                 <div className="flex items-center justify-between rounded-xl border-l-2 border-l-[#14b8a6] bg-[#14b8a6]/[0.08] p-3">

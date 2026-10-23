@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react"
 import { ThreeDnaCanvas } from "@/components/ThreeDnaCanvas"
-import { medEngine } from "@/lib/medsentinelEngine"
+import { medsentinelApi, type SessionUser } from "@/lib/medsentinelApi"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -33,10 +33,10 @@ import {
 
 interface LoginPageProps {
   onBackToHome: () => void
-  onLoginSuccess?: (role: string, name: string) => void
+  onLoginSuccess?: (user: SessionUser) => void
 }
 
-type RoleKey = "doctor" | "dr_asha" | "nurse" | "nurse_priya" | "clerk_ravi" | "reviewer_meera" | "admin"
+type RoleKey = "doctor" | "dr_asha" | "nurse" | "nurse_priya" | "clerk_ravi" | "rec_neha" | "reviewer_meera" | "admin"
 
 interface RoleData {
   title: string
@@ -68,8 +68,8 @@ const ROLES: Record<RoleKey, RoleData> = {
     tokenTag: "VITALS-RW",
   },
   clerk_ravi: {
-    title: "Elena Ruiz (Ravi) — Billing Clerk",
-    name: "Elena Ruiz",
+    title: "Ravi Kumar — Billing Clerk",
+    name: "Ravi Kumar",
     email: "clerk.ravi",
     defaultPass: "password123",
     badgeColor: "bg-[#f59e0b]",
@@ -77,19 +77,28 @@ const ROLES: Record<RoleKey, RoleData> = {
     tokenTag: "BILLING-ONLY",
   },
   reviewer_meera: {
-    title: "Marcus Chen (Meera) — SOC Reviewer",
-    name: "Marcus Chen",
+    title: "Meera Iyer — SOC Reviewer",
+    name: "Meera Iyer",
     email: "rev.meera",
     defaultPass: "password123",
     badgeColor: "bg-[#c084fc]",
     level: "Tier 4 SOC Forensic Reviewer",
     tokenTag: "SOC-TIER4",
   },
+  rec_neha: {
+    title: "Neha Kapoor — Front Desk",
+    name: "Neha Kapoor",
+    email: "rec.neha",
+    defaultPass: "password123",
+    badgeColor: "bg-[#f97316]",
+    level: "Tier 3 Demographics Only",
+    tokenTag: "DEMOGRAPHICS",
+  },
   doctor: {
     title: "Dr. Elena Vance — Federated Clinical Gate",
     name: "Dr. Elena Vance",
     email: "dr.elena.vance@stjude-health.org",
-    defaultPass: "CyberShield2026!",
+    defaultPass: "password123",
     badgeColor: "bg-[#00f2fe]",
     level: "Tier 1 Clinical Access",
     tokenTag: "EHR-FULL",
@@ -98,7 +107,7 @@ const ROLES: Record<RoleKey, RoleData> = {
     title: "Nurse Sarah Connor — ICU Charge Nurse",
     name: "Nurse Sarah Connor",
     email: "nurse.sarah.connor@stjude-health.org",
-    defaultPass: "CyberShield2026!",
+    defaultPass: "password123",
     badgeColor: "bg-[#10b981]",
     level: "Tier 2 ICU Ward Access",
     tokenTag: "VITALS-RW",
@@ -120,10 +129,10 @@ export function LoginPage({ onBackToHome, onLoginSuccess }: LoginPageProps) {
   const [password, setPassword] = useState(ROLES.doctor.defaultPass)
   const [showPassword, setShowPassword] = useState(false)
   const [bindTerminal, setBindTerminal] = useState(true)
-  const [scenario, setScenario] = useState<"valid" | "invalid">("valid")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [authStatus, setAuthStatus] = useState<"idle" | "success" | "error">("idle")
   const [errorMessage, setErrorMessage] = useState("")
+  const [authenticatedUser, setAuthenticatedUser] = useState<SessionUser | null>(null)
 
   const handleRoleChange = (role: RoleKey) => {
     setSelectedRole(role)
@@ -131,33 +140,25 @@ export function LoginPage({ onBackToHome, onLoginSuccess }: LoginPageProps) {
     setPassword(ROLES[role].defaultPass)
     setAuthStatus("idle")
     setErrorMessage("")
+    setAuthenticatedUser(null)
   }
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setIsSubmitting(true)
     setAuthStatus("idle")
+    setErrorMessage("")
 
-    setTimeout(async () => {
+    try {
+      const user = await medsentinelApi.login(email, password)
+      setAuthenticatedUser(user)
+      setAuthStatus("success")
+    } catch (error: unknown) {
+      setAuthStatus("error")
+      setErrorMessage(error instanceof Error ? error.message : "Unable to authenticate with the MedSentinel backend.")
+    } finally {
       setIsSubmitting(false)
-      if (scenario === "invalid") {
-        setAuthStatus("error")
-        setErrorMessage("ACCESS DENIED [ERR_PERM_403] — Institutional credentials rejected. Incident logged in KARUNA SOC audit queue.")
-        return
-      }
-
-      // Direct authentication via MedSentinel Zero-Trust Engine
-      const res = medEngine.authenticate(email, password)
-      if (res.success) {
-        setAuthStatus("success")
-        setTimeout(() => {
-          onLoginSuccess?.(res.user?.role || ROLES[selectedRole].title, res.user?.fullName || ROLES[selectedRole].name)
-        }, 500)
-      } else {
-        setAuthStatus("error")
-        setErrorMessage(res.reason || "Invalid credentials. Please verify username and master passphrase.")
-      }
-    }, 400)
+    }
   }
 
   const current = ROLES[selectedRole]
@@ -190,7 +191,7 @@ export function LoginPage({ onBackToHome, onLoginSuccess }: LoginPageProps) {
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#38ef7d] opacity-75"></span>
               <span className="relative inline-flex h-2 w-2 rounded-full bg-[#38ef7d]"></span>
             </span>
-            MEDSENTINEL ZERO-TRUST ENGINE ACTIVE
+             MEDSENTINEL BACKEND SESSION GATE ACTIVE
           </Badge>
           <span className="hidden font-mono text-[11px] text-slate-400 sm:inline">
             CLUSTER: <span className="text-[#00f2fe]">US-EAST-04 (ST. JUDE HEALTH)</span>
@@ -223,10 +224,6 @@ export function LoginPage({ onBackToHome, onLoginSuccess }: LoginPageProps) {
               </div>
             </div>
 
-            <div className="flex items-center space-x-2 rounded-full border border-white/[0.08] bg-slate-900/80 px-3 py-1 font-mono text-[10px] text-slate-300">
-              <span className="h-1.5 w-1.5 animate-ping rounded-full bg-[#38ef7d]"></span>
-              <span>CLUSTER TELEMETRY LIVE</span>
-            </div>
           </div>
 
           {/* 3D DNA Canvas Viewport */}
@@ -239,75 +236,6 @@ export function LoginPage({ onBackToHome, onLoginSuccess }: LoginPageProps) {
               <ThreeDnaCanvas />
             </div>
 
-            {/* Clinical HUD Overlays */}
-            <div className="pointer-events-none absolute top-4 left-0 z-20 hidden items-center space-x-2 rounded-lg border border-white/10 bg-slate-950/70 px-3 py-1.5 backdrop-blur-md md:flex">
-              <span className="h-2 w-2 rounded-full bg-[#00f2fe] shadow-[0_0_8px_#00f2fe]"></span>
-              <span className="font-mono text-[10px] tracking-wider text-slate-300">
-                DNA SEQUENCE: <span className="text-[#00f2fe]">STJ-9042-HEURISTIC</span>
-              </span>
-            </div>
-
-            <div className="pointer-events-none absolute top-4 right-0 z-20 hidden items-center space-x-2 rounded-lg border border-white/10 bg-slate-950/70 px-3 py-1.5 backdrop-blur-md md:flex">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-[#38ef7d]"></span>
-              <span className="font-mono text-[10px] tracking-wider text-slate-300">
-                BASE PAIR BOND: <span className="text-[#38ef7d]">SYNCHRONIZED</span>
-              </span>
-            </div>
-          </div>
-
-          {/* 5-Phase Clinical DNA Spectrum HUD */}
-          <div className="relative z-20 mb-4 rounded-xl border border-white/[0.06] bg-slate-950/60 p-3.5 backdrop-blur-md">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="flex items-center space-x-1.5 font-mono text-[10px] tracking-widest text-slate-400 uppercase">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#00f2fe]"></span>
-                <span>Clinical DNA Spectrum HUD</span>
-              </span>
-              <span className="font-mono text-[9px] tracking-wider text-slate-500 uppercase">
-                Dynamic 5-Phase Telemetry Segment
-              </span>
-            </div>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-              {/* Cyan: Cranial / Neuro */}
-              <div className="flex items-center space-x-2 rounded-lg border border-[#00f2fe]/30 bg-[#00f2fe]/[0.08] px-2.5 py-1.5">
-                <span className="h-2 w-2 shrink-0 rounded-full bg-[#00f2fe] shadow-[0_0_8px_#00f2fe]"></span>
-                <div className="min-w-0">
-                  <p className="truncate font-mono text-[11px] font-medium text-white">Cranial / Neuro</p>
-                  <p className="truncate font-mono text-[9px] text-[#00f2fe]/80 uppercase">Telemetry Sync</p>
-                </div>
-              </div>
-              {/* Emerald: Cardiac Vitals */}
-              <div className="flex items-center space-x-2 rounded-lg border border-[#10b981]/30 bg-[#10b981]/[0.08] px-2.5 py-1.5">
-                <span className="h-2 w-2 shrink-0 rounded-full bg-[#10b981] shadow-[0_0_8px_#10b981]"></span>
-                <div className="min-w-0">
-                  <p className="truncate font-mono text-[11px] font-medium text-white">Cardiac Vitals</p>
-                  <p className="truncate font-mono text-[9px] text-[#10b981]/80 uppercase">& Arrhythmia</p>
-                </div>
-              </div>
-              {/* Amber: Genomic Core */}
-              <div className="flex items-center space-x-2 rounded-lg border border-[#f59e0b]/30 bg-[#f59e0b]/[0.08] px-2.5 py-1.5">
-                <span className="h-2 w-2 shrink-0 rounded-full bg-[#f59e0b] shadow-[0_0_8px_#f59e0b]"></span>
-                <div className="min-w-0">
-                  <p className="truncate font-mono text-[11px] font-medium text-white">Genomic Core</p>
-                  <p className="truncate font-mono text-[9px] text-[#f59e0b]/80 uppercase">Sequence Chain</p>
-                </div>
-              </div>
-              {/* Rose: Anomaly & Threat */}
-              <div className="flex items-center space-x-2 rounded-lg border border-[#f43f5e]/30 bg-[#f43f5e]/[0.08] px-2.5 py-1.5">
-                <span className="h-2 w-2 shrink-0 rounded-full bg-[#f43f5e] shadow-[0_0_8px_#f43f5e]"></span>
-                <div className="min-w-0">
-                  <p className="truncate font-mono text-[11px] font-medium text-white">Anomaly & Threat</p>
-                  <p className="truncate font-mono text-[9px] text-[#f43f5e]/80 uppercase">Detection Active</p>
-                </div>
-              </div>
-              {/* Violet: Cryptographic Vault */}
-              <div className="col-span-2 flex items-center space-x-2 rounded-lg border border-[#a855f7]/30 bg-[#a855f7]/[0.08] px-2.5 py-1.5 sm:col-span-1">
-                <span className="h-2 w-2 shrink-0 rounded-full bg-[#a855f7] shadow-[0_0_8px_#a855f7]"></span>
-                <div className="min-w-0">
-                  <p className="truncate font-mono text-[11px] font-medium text-white">Crypto Vault</p>
-                  <p className="truncate font-mono text-[9px] text-[#a855f7]/80 uppercase">Zero-Trust Access</p>
-                </div>
-              </div>
-            </div>
           </div>
 
           {/* Bottom Manifesto */}
@@ -364,10 +292,10 @@ export function LoginPage({ onBackToHome, onLoginSuccess }: LoginPageProps) {
                     <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-[#ff5370]" />
                     <div>
                       <div className="font-mono text-[11px] font-bold text-[#ff5370]">
-                        ACCESS DENIED [ERR_PERM_403]
+                         AUTHENTICATION GATE ERROR
                       </div>
                       <p className="mt-0.5 text-[11px] text-slate-300">
-                        {errorMessage || "Institutional credentials rejected. Incident logged in KARUNA SOC audit queue."}
+                         {errorMessage || "The backend rejected this authentication attempt."}
                       </p>
                     </div>
                   </div>
@@ -381,8 +309,8 @@ export function LoginPage({ onBackToHome, onLoginSuccess }: LoginPageProps) {
                       <span className="text-xs font-semibold text-white">Identity & Ward Cryptokey Verified</span>
                     </div>
                     <p className="text-[11px] text-slate-300">
-                      Establishing isolated sandbox session for{" "}
-                      <span className="font-mono text-[#00f2fe]">{current.name}</span>. Enforcing audit policy...
+                       Establishing isolated session for{" "}
+                       <span className="font-mono text-[#00f2fe]">{authenticatedUser?.name || current.name}</span>. Enforcing audit policy...
                     </p>
                     <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-slate-900">
                       <div className="h-full w-full animate-pulse rounded-full bg-gradient-to-r from-[#00f2fe] to-[#38ef7d]" />
@@ -390,7 +318,7 @@ export function LoginPage({ onBackToHome, onLoginSuccess }: LoginPageProps) {
                     <Button
                       type="button"
                       size="sm"
-                      onClick={() => onLoginSuccess?.(ROLES[selectedRole].title, ROLES[selectedRole].name)}
+                      onClick={() => authenticatedUser && onLoginSuccess?.(authenticatedUser)}
                       className="mt-2 bg-[#38ef7d] text-slate-950 hover:bg-[#34d399] font-bold text-xs"
                     >
                       Enter MedSentinel Dashboard Now →
@@ -458,8 +386,9 @@ export function LoginPage({ onBackToHome, onLoginSuccess }: LoginPageProps) {
                         {[
                           { key: "dr_asha" as RoleKey, label: "Dr. Asha" },
                           { key: "nurse_priya" as RoleKey, label: "Nurse Priya" },
-                          { key: "clerk_ravi" as RoleKey, label: "Elena Ruiz" },
-                          { key: "reviewer_meera" as RoleKey, label: "Marcus (SOC)" },
+                           { key: "clerk_ravi" as RoleKey, label: "Ravi (Billing)" },
+                           { key: "rec_neha" as RoleKey, label: "Neha (Front Desk)" },
+                           { key: "reviewer_meera" as RoleKey, label: "Meera (SOC)" },
                           { key: "doctor" as RoleKey, label: "Dr. Vance" },
                           { key: "admin" as RoleKey, label: "Admin" },
                         ].map((item) => (
@@ -484,7 +413,7 @@ export function LoginPage({ onBackToHome, onLoginSuccess }: LoginPageProps) {
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
                       <Label htmlFor="email" className="font-mono text-[11px] tracking-wider text-slate-300 uppercase">
-                        Institutional Email
+                        Institutional ID / Email
                       </Label>
                       <span className="font-mono text-[9px] text-slate-500">LDAP / SSO FEDERATED</span>
                     </div>
@@ -492,7 +421,7 @@ export function LoginPage({ onBackToHome, onLoginSuccess }: LoginPageProps) {
                       <Mail className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-500" />
                       <Input
                         id="email"
-                        type="email"
+                        type="text"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         placeholder="name@stjude-health.org"
@@ -511,16 +440,7 @@ export function LoginPage({ onBackToHome, onLoginSuccess }: LoginPageProps) {
                       >
                         Biometric Master Passphrase
                       </Label>
-                      <a
-                        href="#emergency"
-                        onClick={(e) => {
-                          e.preventDefault()
-                          alert("Emergency Token requested. MFA push dispatched to registered institutional YubiKey.")
-                        }}
-                        className="font-mono text-[10px] text-slate-400 transition hover:text-[#00f2fe]"
-                      >
-                        Emergency Token?
-                      </a>
+                      <span className="font-mono text-[9px] text-slate-500">SESSION COOKIE AUTHENTICATION</span>
                     </div>
                     <div className="relative">
                       <KeyRound className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-500" />
@@ -535,6 +455,7 @@ export function LoginPage({ onBackToHome, onLoginSuccess }: LoginPageProps) {
                       />
                       <button
                         type="button"
+                        aria-label={showPassword ? "Hide passphrase" : "Show passphrase"}
                         onClick={() => setShowPassword(!showPassword)}
                         className="absolute top-1/2 right-3 -translate-y-1/2 text-slate-400 hover:text-[#00f2fe]"
                       >
@@ -542,7 +463,6 @@ export function LoginPage({ onBackToHome, onLoginSuccess }: LoginPageProps) {
                       </button>
                     </div>
                   </div>
-
                   {/* Terminal Binding Switch (shadcn Switch) */}
                   <div className="flex items-center justify-between py-1">
                     <div className="flex items-center space-x-2">
@@ -584,45 +504,6 @@ export function LoginPage({ onBackToHome, onLoginSuccess }: LoginPageProps) {
                   GATEWAY: US-EAST-04 [ST. JUDE MEDICAL CLUSTER] • LATENCY: 14ms
                 </p>
 
-                {/* Simulation Mode Selector & Direct Bypass */}
-                <div className="flex flex-col gap-2 border-t border-white/[0.06] pt-3 font-mono text-[11px] text-slate-400">
-                  <div className="flex items-center justify-between">
-                    <span>Simulation Mode:</span>
-                    <div className="flex items-center space-x-3">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setScenario("valid")
-                          setAuthStatus("idle")
-                        }}
-                        className={`text-xs transition ${scenario === "valid" ? "font-bold text-[#00f2fe] underline" : "text-slate-400 hover:text-white"}`}
-                      >
-                        Valid Token
-                      </button>
-                      <span className="text-slate-600">•</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setScenario("invalid")
-                          setAuthStatus("idle")
-                        }}
-                        className={`text-xs transition ${scenario === "invalid" ? "font-bold text-[#ff5370] underline" : "text-slate-400 hover:text-rose-400"}`}
-                      >
-                        Trigger Breach Deny
-                      </button>
-                    </div>
-                  </div>
-
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => onLoginSuccess?.(ROLES[selectedRole].title, ROLES[selectedRole].name)}
-                    className="w-full mt-2 border-teal-500/30 bg-teal-500/10 text-teal-300 hover:bg-teal-500 hover:text-black font-semibold text-xs"
-                  >
-                    Bypass / Open Full Security Dashboard Directly →
-                  </Button>
-                </div>
               </CardFooter>
             </Card>
           </div>

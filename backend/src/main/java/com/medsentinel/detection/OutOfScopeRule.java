@@ -2,10 +2,8 @@ package com.medsentinel.detection;
 
 import com.medsentinel.logging.AccessLog;
 import com.medsentinel.logging.AccessLogRepository;
-import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -13,10 +11,13 @@ import java.util.List;
  * R3: Out-of-scope access — action/resource outside role permissions.
  * Fires when a DENIED access event is logged.
  */
-@Component
 public class OutOfScopeRule implements DetectionRule {
 
     private final AccessLogRepository accessLogRepo;
+
+    public OutOfScopeRule() {
+        this(new AccessLogRepository());
+    }
 
     public OutOfScopeRule(AccessLogRepository accessLogRepo) {
         this.accessLogRepo = accessLogRepo;
@@ -33,23 +34,16 @@ public class OutOfScopeRule implements DetectionRule {
 
     @Override
     public List<RuleHit> evaluate(AccessLog triggeringEntry) {
-        // Only fires on DENIED events
         if (triggeringEntry.getOutcome() != AccessLog.Outcome.DENIED) {
             return Collections.emptyList();
         }
 
-        // Each denied access is itself evidence
         String username = triggeringEntry.getUsernameAttempted();
         Long userId = triggeringEntry.getUserId();
 
-        // Collect all denied events in the window for this user
-        LocalDateTime since = LocalDateTime.now().minusMinutes(10);
-        List<AccessLog> deniedLogs = accessLogRepo.findDeniedAccessSince(since).stream()
-            .filter(a -> {
-                if (userId != null && userId.equals(a.getUserId())) return true;
-                return username.equals(a.getUsernameAttempted());
-            })
-            .toList();
+        LocalDateTime eventTime = triggeringEntry.getTs() != null ? triggeringEntry.getTs() : LocalDateTime.now();
+        LocalDateTime since = eventTime.minusMinutes(10);
+        List<AccessLog> deniedLogs = accessLogRepo.findDeniedAccessForUserSince(userId, username, since);
 
         if (deniedLogs.isEmpty()) return Collections.emptyList();
 

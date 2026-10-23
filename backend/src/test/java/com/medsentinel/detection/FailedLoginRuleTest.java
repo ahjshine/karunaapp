@@ -18,7 +18,7 @@ class FailedLoginRuleTest {
         FailedLoginRule rule = new FailedLoginRule(repo, 5, 5);
         List<AccessLog> failures = java.util.stream.IntStream.rangeClosed(1, 5)
             .mapToObj(i -> failed(i)).toList();
-        when(repo.findFailedLoginsSince(any())).thenReturn(failures);
+        when(repo.findFailedLoginsForAttemptSince(eq("dr.asha"), eq("10.0.0.1"), any())).thenReturn(failures);
 
         List<RuleHit> hits = rule.evaluate(failures.get(4));
 
@@ -34,7 +34,7 @@ class FailedLoginRuleTest {
         FailedLoginRule rule = new FailedLoginRule(repo, 5, 5);
         List<AccessLog> failures = java.util.stream.IntStream.rangeClosed(1, 5)
             .mapToObj(i -> failed(i)).toList();
-        when(repo.findFailedLoginsSince(any())).thenReturn(failures);
+        when(repo.findFailedLoginsForAttemptSince(eq("dr.asha"), eq("127.0.0.1"), any())).thenReturn(failures);
         AccessLog success = new AccessLog().usernameAttempted("dr.asha").action("LOGIN")
             .outcome(AccessLog.Outcome.ALLOWED);
         success.setLogId(6L);

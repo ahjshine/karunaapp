@@ -17,12 +17,13 @@ import { Shield, CheckCircle2, Loader2, Calendar } from "lucide-react"
 interface DemoDialogProps {
   isOpen: boolean
   onClose: () => void
-  scheduleInfo?: { day: string; slot: string }
+  scheduleInfo?: { day: string; date?: string; slot: string }
 }
 
 export function DemoDialog({ isOpen, onClose, scheduleInfo }: DemoDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isSuccess, setIsSuccess] = useState(false)
+  const [requestId, setRequestId] = useState("")
 
   const [fullName, setFullName] = useState("")
   const [workEmail, setWorkEmail] = useState("")
@@ -30,18 +31,44 @@ export function DemoDialog({ isOpen, onClose, scheduleInfo }: DemoDialogProps) {
   const [ehrSystem, setEhrSystem] = useState("Epic")
   const [notes, setNotes] = useState("")
 
+  const selectedSchedule = scheduleInfo
+    ? `${scheduleInfo.day}${scheduleInfo.date ? `, ${scheduleInfo.date}` : ""} at ${scheduleInfo.slot}`
+    : ""
+
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
     setIsSubmitting(true)
 
     setTimeout(() => {
+      const generatedRequestId = `DEMO-${Date.now().toString(36).toUpperCase()}`
+      localStorage.setItem(
+        `karuna-demo-request-${generatedRequestId}`,
+        JSON.stringify({
+          requestId: generatedRequestId,
+          fullName,
+          workEmail,
+          hospitalName,
+          ehrSystem,
+          notes,
+          schedule: scheduleInfo ?? null,
+          capturedAt: new Date().toISOString(),
+        }),
+      )
+      setRequestId(generatedRequestId)
       setIsSubmitting(false)
       setIsSuccess(true)
     }, 1000)
   }
 
   const handleReset = () => {
+    setIsSubmitting(false)
     setIsSuccess(false)
+    setRequestId("")
+    setFullName("")
+    setWorkEmail("")
+    setHospitalName("")
+    setEhrSystem("Epic")
+    setNotes("")
     onClose()
   }
 
@@ -67,11 +94,11 @@ export function DemoDialog({ isOpen, onClose, scheduleInfo }: DemoDialogProps) {
                 <div className="flex items-center gap-2">
                   <Calendar className="h-4 w-4 text-[#14b8a6]" />
                   <span>
-                    Selected Slot: <strong>{scheduleInfo.day}</strong> at <strong>{scheduleInfo.slot}</strong>
+                    Selected Slot: <strong>{selectedSchedule}</strong>
                   </span>
                 </div>
                 <Badge variant="outline" className="border-teal-700/30 text-[10px] text-[#0d514f]">
-                  Saved
+                  Preview
                 </Badge>
               </div>
             )}
@@ -179,10 +206,23 @@ export function DemoDialog({ isOpen, onClose, scheduleInfo }: DemoDialogProps) {
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
               <CheckCircle2 className="h-8 w-8" />
             </div>
-            <DialogTitle className="mt-4 text-xl font-bold text-[#0b1220]">Demo Request Received</DialogTitle>
+            <DialogTitle className="mt-4 text-xl font-bold text-[#0b1220]">Demo Request Captured</DialogTitle>
             <p className="mt-2 text-sm text-slate-600">
-              Thank you, <strong>{fullName || "Doctor"}</strong>. Our Clinical Security Architect has scheduled your
-              walk-through. An invitation and sandbox credentials have been sent to <strong>{workEmail}</strong>.
+              Thank you, <strong>{fullName || "Doctor"}</strong>. This demo-only preview captured your request details
+              locally.
+            </p>
+            {selectedSchedule && (
+              <p className="mt-3 text-sm text-slate-600">
+                Requested time: <strong>{selectedSchedule}</strong>
+              </p>
+            )}
+            {requestId && <p className="mt-2 font-mono text-xs text-slate-500">Local preview reference: {requestId}</p>}
+            <p
+              role="status"
+              className="mx-auto mt-4 max-w-sm rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-left text-xs leading-relaxed text-amber-900"
+            >
+              Demo-only notice: no email, calendar invitation, or sandbox credentials were sent, and this preview did
+              not submit your details to a backend service.
             </p>
             <div className="mt-6">
               <Button onClick={handleReset} className="bg-[#0b1220] px-6 text-white hover:bg-slate-800">

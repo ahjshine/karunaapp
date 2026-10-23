@@ -1,18 +1,8 @@
 package com.medsentinel.alert;
 
-import jakarta.persistence.*;
-
-@Entity
-@Table(name = "alert_evidence")
-@IdClass(AlertEvidenceId.class)
 public class AlertEvidence {
 
-    @Id
-    @Column(name = "alert_id")
     private Long alertId;
-
-    @Id
-    @Column(name = "log_id")
     private Long logId;
 
     public AlertEvidence() {}

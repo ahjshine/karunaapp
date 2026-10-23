@@ -590,6 +590,50 @@ export class MedSentinelEngine {
     return this.alerts
   }
 
+  public getAlert(alertId: string): MedAlert | undefined {
+    return this.alerts.find((alert) => alert.alertId === alertId)
+  }
+
+  public getAlertEvidence(alertId: string): MedAccessLog[] {
+    const alert = this.getAlert(alertId)
+    if (!alert) return []
+    if (alert.evidenceLogs.length > 0) return alert.evidenceLogs
+
+    const matchingLogs = this.logs.filter((log) => {
+      if (alert.alertId === "A-101") return log.username === "Elena Ruiz" && log.action === "OPEN_CLINICAL"
+      if (alert.alertId === "A-102") return log.username === "dr.asha" && log.action === "LOGIN"
+      if (alert.alertId === "A-103") return log.action === "BREAK_GLASS"
+      if (alert.alertId === "A-104") return log.username.includes("Maya") && log.action === "OPEN_NOTE"
+      return false
+    })
+
+    return matchingLogs.slice(0, Math.max(1, Math.min(alert.count, 38)))
+  }
+
+  public updateAlertStatus(alertId: string, status: MedAlert["status"]): boolean {
+    const alert = this.getAlert(alertId)
+    if (!alert) return false
+    alert.status = status
+    return true
+  }
+
+  public recordReviewerAction(
+    reviewerUsername: string,
+    alertId: string,
+    action: string,
+    note = "",
+  ): MedAccessLog {
+    const detail = note.trim() ? `: ${note.trim()}` : ""
+    return this.recordLog(
+      reviewerUsername,
+      "ALLOWED",
+      "VIEW",
+      `Reviewer action ${action} for alert ${alertId}${detail}`,
+      null,
+      "SOC",
+    )
+  }
+
   public getLogs(): MedAccessLog[] {
     return this.logs
   }

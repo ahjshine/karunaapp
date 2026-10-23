@@ -4,8 +4,7 @@ import com.medsentinel.auth.AppUserDetails;
 import com.medsentinel.logging.AccessLog;
 import com.medsentinel.logging.AccessLogService;
 import com.medsentinel.rbac.AccessGuard;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.stereotype.Service;
+import com.medsentinel.security.AuthenticationRequiredException;
 
 import java.util.List;
 
@@ -13,7 +12,6 @@ import java.util.List;
  * Single entry point for patient data access.
  * Enforces RBAC and logs every attempt.
  */
-@Service
 public class PatientService {
 
     private final PatientRepository patientRepo;
@@ -30,26 +28,37 @@ public class PatientService {
     }
 
     public List<Patient> listPatients() {
+        return listPatients(requireCurrentUser());
+    }
+
+    public List<Patient> listPatients(AppUserDetails user) {
+        user = requireUser(user);
+        requireDemographicPermission(user);
         return patientRepo.findAll();
     }
 
     public Patient getPatient(Long patientId) {
+        return getPatient(requireCurrentUser(), patientId);
+    }
+
+    public Patient getPatient(AppUserDetails user, Long patientId) {
+        user = requireUser(user);
+        requireDemographicPermission(user);
         return patientRepo.findById(patientId).orElse(null);
     }
 
-    /**
-     * Fetch records for a patient, enforcing RBAC.
-     * Returns the records if allowed, throws AccessDeniedException if not.
-     */
     public List<PatientRecord> getRecords(Long patientId, PatientRecord.RecordType type) {
-        AppUserDetails user = getCurrentUser();
-        String ip = "127.0.0.1"; // In a real app, extracted from request
+        return getRecords(requireCurrentUser(), patientId, type);
+    }
+
+    public List<PatientRecord> getRecords(AppUserDetails user, Long patientId, PatientRecord.RecordType type) {
+        user = requireUser(user);
+        String ip = "127.0.0.1";
 
         // Check permission
         String denialReason = accessGuard.checkAccess(user, type, patientId);
 
         if (denialReason != null) {
-            // Log denied access
             accessLogService.logAccess(new AccessLog()
                 .userId(user.getUserId())
                 .usernameAttempted(user.getUsername())
@@ -63,10 +72,8 @@ public class PatientService {
             throw new AccessDeniedException(denialReason);
         }
 
-        // Fetch records
         List<PatientRecord> records = recordRepo.findByPatientIdAndType(patientId, type);
 
-        // Log allowed access
         for (PatientRecord record : records) {
             accessLogService.logAccess(new AccessLog()
                 .userId(user.getUserId())
@@ -83,16 +90,18 @@ public class PatientService {
         return records;
     }
 
-    /**
-     * View all record types the user is allowed to see for a patient.
-     */
     public PatientRecordBundle getAccessibleRecords(Long patientId) {
-        AppUserDetails user = getCurrentUser();
+        return getAccessibleRecords(requireCurrentUser(), patientId);
+    }
+
+    public PatientRecordBundle getAccessibleRecords(AppUserDetails user, Long patientId) {
+        user = requireUser(user);
+        requireDemographicPermission(user);
         PatientRecordBundle bundle = new PatientRecordBundle();
 
         for (PatientRecord.RecordType type : PatientRecord.RecordType.values()) {
             try {
-                List<PatientRecord> records = getRecords(patientId, type);
+                List<PatientRecord> records = getRecords(user, patientId, type);
                 bundle.addRecords(type, records);
             } catch (AccessDeniedException e) {
                 bundle.addDenied(type, e.getMessage());
@@ -102,11 +111,18 @@ public class PatientService {
         return bundle;
     }
 
-    /**
-     * Search patients by name.
-     */
     public List<Patient> searchPatients(String query) {
-        AppUserDetails user = getCurrentUser();
+        return searchPatients(requireCurrentUser(), query);
+    }
+
+    public List<Patient> searchPatients(AppUserDetails user, String query) {
+        user = requireUser(user);
+        requireDemographicPermission(user);
+
+        String normalizedQuery = query == null ? "" : query.trim();
+        if (normalizedQuery.isEmpty()) {
+            return List.of();
+        }
 
         accessLogService.logAccess(new AccessLog()
             .userId(user.getUserId())
@@ -114,26 +130,53 @@ public class PatientService {
             .action("SEARCH")
             .resourceType("PATIENT")
             .outcome(AccessLog.Outcome.ALLOWED)
-            .reason("Patient search: " + query));
+            .reason("Patient search: " + normalizedQuery));
 
-        return patientRepo.findAll().stream()
-            .filter(p -> p.getName().toLowerCase().contains(query.toLowerCase()))
-            .toList();
+        return patientRepo.findByNameContaining(normalizedQuery);
     }
 
-    private AppUserDetails getCurrentUser() {
-        return (AppUserDetails) SecurityContextHolder.getContext()
-            .getAuthentication().getPrincipal();
+    // ThreadLocal holder for user context when needed
+    private static final ThreadLocal<AppUserDetails> currentThreadUser = new ThreadLocal<>();
+
+    public static void setCurrentUser(AppUserDetails user) {
+        currentThreadUser.set(user);
     }
 
-    /** Thrown when RBAC denies access */
+    public static AppUserDetails getCurrentUser() {
+        return currentThreadUser.get();
+    }
+
+    public static AppUserDetails requireCurrentUser() {
+        AppUserDetails user = currentThreadUser.get();
+        if (user == null) {
+            throw new AuthenticationRequiredException();
+        }
+        return user;
+    }
+
+    public static void clearCurrentUser() {
+        currentThreadUser.remove();
+    }
+
+    private AppUserDetails requireUser(AppUserDetails user) {
+        if (user == null) {
+            throw new AuthenticationRequiredException();
+        }
+        return user;
+    }
+
+    private void requireDemographicPermission(AppUserDetails user) {
+        if (!user.hasPermission("VIEW_DEMOGRAPHICS") && !user.hasRole("ADMIN")) {
+            throw new AccessDeniedException("Role " + user.getRoleName() + " lacks permission VIEW_DEMOGRAPHICS");
+        }
+    }
+
     public static class AccessDeniedException extends RuntimeException {
         public AccessDeniedException(String message) {
             super(message);
         }
     }
 
-    /** Bundle of records grouped by type, with denial info */
     public static class PatientRecordBundle {
         private final java.util.Map<PatientRecord.RecordType, List<PatientRecord>> records = new java.util.EnumMap<>(PatientRecord.RecordType.class);
         private final java.util.Map<PatientRecord.RecordType, String> denied = new java.util.EnumMap<>(PatientRecord.RecordType.class);

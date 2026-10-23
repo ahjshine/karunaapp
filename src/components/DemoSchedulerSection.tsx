@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import { Video, CheckCircle2, ArrowRight } from "lucide-react"
 
 interface DemoSchedulerSectionProps {
-  onOpenDemo: (initialSchedule?: { day: string; slot: string }) => void
+  onOpenDemo: (initialSchedule?: { day: string; date: string; slot: string }) => void
 }
 
 export function DemoSchedulerSection({ onOpenDemo }: DemoSchedulerSectionProps) {
@@ -21,9 +21,10 @@ export function DemoSchedulerSection({ onOpenDemo }: DemoSchedulerSectionProps) 
   ]
 
   const slots = ["10:00 AM", "1:30 PM", "3:00 PM", "4:30 PM"]
+  const selectedDate = weekdays.find((day) => day.label === selectedDay)?.date ?? ""
 
   const handleContinue = () => {
-    onOpenDemo({ day: selectedDay, slot: selectedSlot })
+    onOpenDemo({ day: selectedDay, date: selectedDate, slot: selectedSlot })
   }
 
   return (
@@ -79,7 +80,7 @@ export function DemoSchedulerSection({ onOpenDemo }: DemoSchedulerSectionProps) 
                     </div>
                   </div>
                   <Badge variant="outline" className="border-teal-700/20 text-[#0d514f] text-[10px]">
-                    Live Booking
+                    Demo Preview
                   </Badge>
                 </div>
               </CardHeader>
@@ -98,6 +99,8 @@ export function DemoSchedulerSection({ onOpenDemo }: DemoSchedulerSectionProps) 
                       <button
                         key={day.label}
                         type="button"
+                        aria-label={`Select ${day.label}, ${day.date}`}
+                        aria-pressed={selectedDay === day.label}
                         onClick={() => setSelectedDay(day.label)}
                         className={`flex flex-col items-center justify-center rounded-lg border py-2 transition ${
                           selectedDay === day.label
@@ -120,6 +123,7 @@ export function DemoSchedulerSection({ onOpenDemo }: DemoSchedulerSectionProps) 
                       <button
                         key={slot}
                         type="button"
+                        aria-pressed={selectedSlot === slot}
                         onClick={() => setSelectedSlot(slot)}
                         className={`rounded-lg border px-2 py-2 text-center text-xs font-semibold transition ${
                           selectedSlot === slot

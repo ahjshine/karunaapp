@@ -61,7 +61,7 @@ export function SecuritySection({ onInspectAlert }: SecuritySectionProps) {
           <div className="overflow-hidden rounded-2xl border border-[#26354b] bg-[#0f172a] shadow-2xl">
             <div className="flex items-center justify-between border-b border-[#26354b] px-6 py-4">
               <span className="font-mono text-[10px] tracking-wider text-[#718198] uppercase">ALERT DETAIL</span>
-              <span className="font-mono text-xs font-bold text-[#8292a8]">A-101 · OPEN</span>
+              <span className="font-mono text-xs font-bold text-[#8292a8]">A-101 · DEMO</span>
             </div>
 
             <div className="p-6 sm:p-8">
@@ -78,7 +78,7 @@ export function SecuritySection({ onInspectAlert }: SecuritySectionProps) {
               <div className="mt-6 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-[#26354b] bg-[#26354b]">
                 <div className="bg-[#0f172a] p-4">
                   <span className="font-mono text-[9px] text-[#64758c] uppercase">RISK SCORE</span>
-                  <div className="mt-1 font-mono text-sm font-bold text-rose-400">75 / 100 · High</div>
+                <div className="mt-1 font-mono text-sm font-bold text-rose-400">75 / 100 · Sample score</div>
                 </div>
 
                 <div className="bg-[#0f172a] p-4">

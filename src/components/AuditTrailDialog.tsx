@@ -11,6 +11,8 @@ import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ShieldCheck, Download, FileKey } from "lucide-react"
+import { medsentinelApi, type AlertDetailViewModel } from "@/lib/medsentinelApi"
+import { useEffect, useState } from "react"
 
 interface AuditTrailDialogProps {
   isOpen: boolean
@@ -19,30 +21,45 @@ interface AuditTrailDialogProps {
 }
 
 export function AuditTrailDialog({ isOpen, onClose, alertId = "A-101" }: AuditTrailDialogProps) {
-  // Mock generated 38 records forensic audit stream
-  const records = Array.from({ length: 38 }, (_, i) => {
-    const minute = Math.floor(i / 6)
-    const second = (i * 11) % 60
-    const time = `09:4${2 + minute}:${second < 10 ? "0" + second : second}`
-    const recordTypes = [
-      "Oncology Biopsy Report",
-      "Surgical Note (Cardiothoracic)",
-      "Psychiatric Clinical Evaluation",
-      "Pediatric ICU Chart",
-      "Executive VIP Health Record",
-      "Toxicology Lab Results",
-    ]
-    const wards = ["Ward 4B (Oncology)", "Ward 2A (Cardiac ICU)", "Ward 6C (Neurology)", "Main ED Bay 3"]
+  const [detail, setDetail] = useState<AlertDetailViewModel | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [errorMessage, setErrorMessage] = useState("")
 
-    return {
-      id: `EVT-8942-${100 + i}`,
-      time,
-      patientId: `PT-${80000 + i * 231}-STJ`,
-      type: recordTypes[i % recordTypes.length],
-      ward: wards[i % wards.length],
-      hash: `0x7f${(i * 37 + 192).toString(16)}...c4`,
+  useEffect(() => {
+    if (!isOpen) return
+
+    let cancelled = false
+    setIsLoading(true)
+    setErrorMessage("")
+    void medsentinelApi
+      .getAlert(alertId)
+      .then((nextDetail) => {
+        if (!cancelled) setDetail(nextDetail)
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setDetail(null)
+          setErrorMessage(error instanceof Error ? error.message : "Unable to load live audit evidence.")
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false)
+      })
+
+    return () => {
+      cancelled = true
     }
-  })
+  }, [alertId, isOpen])
+
+  const alert = detail?.alert
+  const records = (detail?.evidenceLogs ?? []).map((log) => ({
+    id: `LOG-${log.logId}`,
+    time: log.ts,
+    patientId: log.patientRef ?? "Patient ref unavailable",
+    type: log.action.replaceAll("_", " "),
+    ward: log.wardName ?? "Scope not recorded",
+    hash: log.hash ? `${log.hash.slice(0, 8)}…${log.hash.slice(-4)}` : "Hash unavailable",
+  }))
 
   const handleExport = () => {
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(records, null, 2))
@@ -60,17 +77,16 @@ export function AuditTrailDialog({ isOpen, onClose, alertId = "A-101" }: AuditTr
         <DialogHeader>
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-3">
             <div className="flex items-center gap-2">
-              <Badge className="border-rose-500/30 bg-rose-500/15 text-rose-300">High</Badge>
-              <DialogTitle className="text-lg font-bold text-white">Forensic Audit Trail — {alertId}</DialogTitle>
+              <Badge className={alert?.severity === "High" ? "border-rose-500/30 bg-rose-500/15 text-rose-300" : alert?.severity === "Medium" ? "border-amber-500/30 bg-amber-500/15 text-amber-300" : "border-sky-500/30 bg-sky-500/15 text-sky-300"}>{alert?.severity ?? "Unknown"}</Badge>
+              <DialogTitle className="text-lg font-bold text-white">Forensic Audit Trail — {alert?.alertId ?? alertId}</DialogTitle>
             </div>
             <div className="flex items-center gap-2 font-mono text-xs text-[#5eead4]">
               <ShieldCheck className="h-4 w-4" />
-              <span>SHA-256 Chain Verified</span>
+               <span>{alert && !errorMessage ? "Evidence returned by backend" : "Backend verification unavailable"}</span>
             </div>
           </div>
           <DialogDescription className="pt-2 text-xs text-slate-400">
-            38 clinical records queried in 7 minutes by <strong>Elena Ruiz</strong> (Billing clerk · Patient Accounts).
-            Role baseline for clinical records: <strong>0</strong>.
+             {errorMessage || alert?.text || "Live alert evidence is not available."} {alert && <>Actor: <strong>{alert.user}</strong> ({alert.role}).</>}
           </DialogDescription>
         </DialogHeader>
 
@@ -87,7 +103,19 @@ export function AuditTrailDialog({ isOpen, onClose, alertId = "A-101" }: AuditTr
               </TableRow>
             </TableHeader>
             <TableBody className="divide-y divide-white/[0.06] font-mono text-xs">
-              {records.map((rec) => (
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="py-8 text-center text-slate-400">Loading live evidence…</TableCell>
+                </TableRow>
+              ) : errorMessage ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="py-8 text-center text-rose-300">{errorMessage}</TableCell>
+                </TableRow>
+              ) : records.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="py-8 text-center text-slate-400">No evidence logs were returned for this alert.</TableCell>
+                </TableRow>
+              ) : records.map((rec) => (
                 <TableRow key={rec.id} className="hover:bg-white/[0.03]">
                   <TableCell className="font-semibold text-[#5eead4]">{rec.time}</TableCell>
                   <TableCell className="text-slate-300">{rec.patientId}</TableCell>
@@ -103,7 +131,7 @@ export function AuditTrailDialog({ isOpen, onClose, alertId = "A-101" }: AuditTr
         <DialogFooter className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-4">
           <div className="flex items-center gap-2 text-xs text-slate-400">
             <FileKey className="h-4 w-4 text-[#14b8a6]" />
-            <span>Immutable evidence package locked for legal hold</span>
+             <span>Live evidence package ready for export</span>
           </div>
 
           <div className="flex items-center gap-2">

@@ -8,10 +8,6 @@ import com.medsentinel.patient.Patient;
 import com.medsentinel.patient.PatientRepository;
 import com.medsentinel.patient.PatientRecord;
 import com.medsentinel.patient.RecordRepository;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -19,10 +15,7 @@ import java.util.List;
  * Handles break-glass emergency access for doctors.
  * Grants access, logs it, and creates a review alert.
  */
-@Service
 public class BreakGlassService {
-
-    private static final Logger log = LoggerFactory.getLogger(BreakGlassService.class);
 
     private final BreakGlassRepository breakGlassRepo;
     private final PatientRepository patientRepo;
@@ -46,11 +39,9 @@ public class BreakGlassService {
      * Execute break-glass access. Only doctors can use this.
      * Requires justification >= 10 chars.
      */
-    @Transactional
     public BreakGlassResult executeBreakGlass(AppUserDetails user, Long patientId,
                                                String justification) {
-        // Validate
-        if (!"DOCTOR".equals(user.getRoleName())) {
+        if (user == null || !user.hasRole("DOCTOR") || !user.hasPermission("VIEW_CLINICAL")) {
             throw new IllegalStateException("Only doctors can use break-glass access");
         }
         if (justification == null || justification.length() < 10) {
@@ -85,9 +76,6 @@ public class BreakGlassService {
             List.of(logEntry.getLogId())
         );
 
-        log.warn("Break-glass: user={}, patient={}, justification={}",
-            user.getUsername(), patientId, justification);
-
         // Fetch all records for the patient
         List<PatientRecord> records = recordRepo.findByPatientId(patientId);
 
@@ -98,7 +86,6 @@ public class BreakGlassService {
         return breakGlassRepo.findByReviewedFalseOrderByTsDesc();
     }
 
-    @Transactional
     public void markReviewed(Long bgId) {
         BreakGlassEvent event = breakGlassRepo.findById(bgId)
             .orElseThrow(() -> new IllegalArgumentException("Break-glass event not found"));
